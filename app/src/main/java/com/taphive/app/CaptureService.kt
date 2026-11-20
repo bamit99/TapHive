@@ -72,6 +72,8 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
 
         pfd = fd
         sessionId = UUID.randomUUID().toString()
+        CaptureService.packetsCaptured = 0L
+        app.sender.resetForwardedCount()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID,
@@ -82,8 +84,12 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
             startForeground(NOTIFICATION_ID, notification())
         }
         isRunning = true
-        app.sender.enqueue(captureEvent("capture_start"))
+        app.sender.enqueue(captureEvent("capture_start", includeTotals = true))
         reader = PacketReader(fd, this).also { it.start() }
+    }
+
+    override fun onPacketCaptured(total: Long) {
+        CaptureService.packetsCaptured = total
     }
 
     override fun onFlowOpen(
@@ -159,7 +165,12 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         }
     }
 
-    private fun captureEvent(name: String) = SyslogEvent(sessionId = sessionId, event = name)
+    private fun captureEvent(name: String, includeTotals: Boolean = false) = SyslogEvent(
+        sessionId = sessionId,
+        event = name,
+        packetsCaptured = if (includeTotals) CaptureService.packetsCaptured else null,
+        eventsForwarded = if (includeTotals) app.sender.forwardedEvents else null
+    )
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -191,9 +202,10 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
 
     private fun releaseCapture(emitLifecycle: Boolean) {
         reader?.stop()
+        CaptureService.packetsCaptured = reader?.packetsCaptured ?: CaptureService.packetsCaptured
         reader = null
         if (emitLifecycle && isRunning) {
-            app.sender.enqueue(captureEvent("capture_stop"))
+            app.sender.enqueue(captureEvent("capture_stop", includeTotals = true))
         }
         try {
             pfd?.close()
@@ -217,6 +229,10 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
 
         @Volatile
         var isRunning = false
+            private set
+
+        @Volatile
+        var packetsCaptured: Long = 0L
             private set
     }
 }

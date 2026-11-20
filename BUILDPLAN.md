@@ -175,7 +175,7 @@ RFC 3164 header `<PRI>MMM dd hh:mm:ss HOST APP[PID]: ` followed by one JSON obje
 
 | Key | Type | Notes |
 | --- | --- | --- |
-| `th_schema_version` | int | 1 for Phase 1; increment on any field change |
+| `th_schema_version` | int | 2 for Phase 1; increment on any field change |
 | `th_session_id` | string | UUID per capture run |
 | `th_event` | enum | `capture_start` / `capture_stop` / `flow_open` / `flow_close` |
 | `th_timestamp` | string | UTC ISO-8601 with milliseconds |
@@ -189,10 +189,16 @@ RFC 3164 header `<PRI>MMM dd hh:mm:ss HOST APP[PID]: ` followed by one JSON obje
 | `th_packets_sent` / `th_packets_received` | int | cumulative at event time |
 | `th_status` | string | flow state or close reason |
 | `th_dropped_events` | int | queue-overflow count, included on lifecycle events |
+| `th_packets_captured` | int | raw packets read from the VPN fd; lifecycle events only |
+| `th_events_forwarded` | int | syslog events successfully sent; lifecycle events only |
 
 Severity: `capture_*` = NOTICE (5), `flow_*` = INFO (6). Facility default local0 (13), so a Phase 1 flow event uses PRI 110. No payload, DNS names, URLs or packet bytes are ever emitted in Phase 1. Example:
 
-`<110>Nov 20 21:41:00 taphive TapHive[1234]: {"th_schema_version":1,"th_session_id":"...","th_event":"flow_close","th_timestamp":"2026-11-20T21:41:00.123Z","th_flow_id":"...","th_uid":10123,"th_ip_version":4,"th_protocol":6,"th_src_ip":"192.168.1.5","th_src_port":52344,"th_dst_ip":"93.184.216.34","th_dst_port":443,"th_bytes_sent":512,"th_bytes_received":2410,"th_packets_sent":4,"th_packets_received":6,"th_status":"CLOSED","th_dropped_events":0}`
+`<110>Nov 20 21:41:00 taphive TapHive[1234]: {"th_schema_version":2,"th_session_id":"...","th_event":"flow_close","th_timestamp":"2026-11-20T21:41:00.123Z","th_flow_id":"...","th_uid":10123,"th_ip_version":4,"th_protocol":6,"th_src_ip":"192.168.1.5","th_src_port":52344,"th_dst_ip":"93.184.216.34","th_dst_port":443,"th_bytes_sent":512,"th_bytes_received":2410,"th_packets_sent":4,"th_packets_received":6,"th_status":"CLOSED","th_dropped_events":0}`
+
+Lifecycle example with aggregate counters:
+
+`<109>Nov 20 21:41:05 taphive TapHive[1234]: {"th_schema_version":2,"th_session_id":"...","th_event":"capture_stop","th_timestamp":"2026-11-20T21:41:05.000Z","th_bytes_sent":0,"th_bytes_received":0,"th_packets_sent":0,"th_packets_received":0,"th_dropped_events":0,"th_packets_captured":1842,"th_events_forwarded":61}`
 
 The full target-state formats below are for later phases; their fields are not emitted in Phase 1.
 

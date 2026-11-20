@@ -9,6 +9,7 @@ import java.io.FileInputStream
 import java.io.IOException
 import java.net.InetAddress
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Reads IP packets from the VPN tunnel and emits flow lifecycle events.
@@ -19,6 +20,8 @@ class PacketReader(
     private val sink: FlowSink
 ) {
     interface FlowSink {
+        fun onPacketCaptured(total: Long)
+
         fun onFlowOpen(
             flowId: Long,
             timestampMs: Long,
@@ -69,6 +72,11 @@ class PacketReader(
         var packetsReceived: Long = 0
         var lastSeen: Long = openedAt
     }
+
+    private val capturedPackets = AtomicLong(0)
+
+    val packetsCaptured: Long
+        get() = capturedPackets.get()
 
     private val flows = LinkedHashMap<String, Flow>()
     private var nextFlowId = 0L
@@ -122,6 +130,8 @@ class PacketReader(
                 }
                 if (count == 0) continue
                 if (count < 0) break
+                capturedPackets.incrementAndGet()
+                safeEmit { sink.onPacketCaptured(capturedPackets.get()) }
                 val now = System.currentTimeMillis()
                 val packet = parse(buffer, count)
                 if (packet != null) {

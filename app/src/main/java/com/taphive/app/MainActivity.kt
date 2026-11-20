@@ -18,6 +18,7 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var statusDot: android.view.View
     private lateinit var syslogInfo: TextView
+    private lateinit var statsInfo: TextView
     private val handler = Handler(Looper.getMainLooper())
     private val statusPoll = object : Runnable {
         override fun run() {
@@ -33,6 +34,7 @@ class MainActivity : Activity() {
         status = findViewById(R.id.status)
         statusDot = findViewById(R.id.status_dot)
         syslogInfo = findViewById(R.id.syslog_info)
+        statsInfo = findViewById(R.id.stats_info)
 
         findViewById<Button>(R.id.start).setOnClickListener { requestStart() }
         findViewById<Button>(R.id.stop).setOnClickListener {
@@ -110,6 +112,11 @@ class MainActivity : Activity() {
             "SYSLOG DISABLED"
         }
         syslogInfo.text = app.sender.lastError?.let { "$target\n$it" } ?: target
+        statsInfo.text = getString(
+            R.string.stats_format,
+            CaptureService.packetsCaptured,
+            app.sender.forwardedEvents
+        )
     }
 
     private companion object {

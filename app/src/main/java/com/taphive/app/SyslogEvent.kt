@@ -25,10 +25,12 @@ data class SyslogEvent(
     val packetsSent: Long = 0,
     val packetsReceived: Long = 0,
     val status: String? = null,
-    val droppedEvents: Long? = null
+    val droppedEvents: Long? = null,
+    val packetsCaptured: Long? = null,
+    val eventsForwarded: Long? = null
 ) {
     fun toJson(): String = JSONObject().apply {
-        put("th_schema_version", 1)
+        put("th_schema_version", 2)
         put("th_session_id", sessionId)
         put("th_event", event)
         put("th_timestamp", UTC_MILLIS.format(timestamp))
@@ -46,6 +48,8 @@ data class SyslogEvent(
         put("th_packets_received", packetsReceived)
         putNullable("th_status", status)
         putNullable("th_dropped_events", droppedEvents)
+        putNullable("th_packets_captured", packetsCaptured)
+        putNullable("th_events_forwarded", eventsForwarded)
     }.toString()
 }
 

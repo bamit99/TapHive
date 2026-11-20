@@ -11,7 +11,8 @@ TapHive is a clean-room Android app that captures **network flow metadata** on a
 - Numeric uid attribution through `ConnectivityManager.getConnectionOwnerUid`; no package-visibility permission in Phase 1.
 - Syslog forwarding over UDP or TCP, disabled by default, with facility/severity settings, bounded queue, rate limiting, and reconnect backoff.
 - Syslog socket is bound to the underlying Wi-Fi/cellular/Ethernet network so it never loops back into TapHive's own metadata-only tunnel.
-- Dark neon UI with live capture state, pulsing status indicator, and sender-error display.
+- Dark neon UI with live capture state, pulsing status indicator, sender-error display, and aggregate counters.
+- Live counters show raw packets captured from the VPN fd and syslog events successfully forwarded; the same totals are included on `capture_start`/`capture_stop` events.
 - No third-party runtime dependencies; only the Android Gradle plugin and Kotlin plugin are used at build time.
 
 ## Architecture
@@ -40,7 +41,7 @@ app/src/main/java/com/taphive/app/
 ├── PacketReader.kt      # Kotlin IP/transport parser + flow tracking
 ├── UidResolver.kt       # numeric uid attribution
 ├── SyslogSender.kt      # RFC 3164 formatter, queue, rate limit, sockets
-├── SyslogEvent.kt       # th_* JSON schema v1
+├── SyslogEvent.kt       # th_* JSON schema v2
 └── Prefs.kt             # SharedPreferences-backed settings
 ```
 
@@ -60,7 +61,7 @@ Example flow event:
 
 ```json
 {
-  "th_schema_version": 1,
+  "th_schema_version": 2,
   "th_session_id": "e5a53bfb-9fab-40d6-aefb-5959535302fa",
   "th_event": "flow_open",
   "th_timestamp": "2026-11-20T17:28:03.997Z",
@@ -80,6 +81,19 @@ Example flow event:
 ```
 
 Event types: `capture_start`, `flow_open`, `flow_close`, `capture_stop`. All events share `th_schema_version` and `th_session_id`; null optional fields are omitted.
+
+Lifecycle events also carry the aggregate counters:
+
+```json
+{
+  "th_schema_version": 2,
+  "th_event": "capture_stop",
+  "th_packets_captured": 1842,
+  "th_events_forwarded": 61
+}
+```
+
+The UI shows the same values as `PACKETS n · FORWARDED n`. These are counts only — no packet payloads are emitted.
 
 ## Build
 
@@ -148,11 +162,11 @@ with open("taphive-syslog.log", "ab", buffering=0) as out:
 On a CPH2585 running Android 16 (API 36), a clean UDP run produced:
 
 - `1 × capture_start`
-- `31 × flow_open`
-- `31 × flow_close` with final byte/packet counters
+- `13 × flow_open`
+- `13 × flow_close` with final byte/packet counters
 - `1 × capture_stop`
 
-All events reached the receiver with matching session ids. TCP forwarding is implemented with reconnect/backoff but was not exercised in that final run.
+`capture_stop` carried `th_packets_captured: 33` and `th_events_forwarded: 27`; the UI showed `PACKETS 33 · FORWARDED 28` after the stop event itself was forwarded. All events reached the receiver with matching session ids and `th_schema_version: 2`. TCP forwarding is implemented with reconnect/backoff but was not exercised in that final run.
 
 ## Privacy and permissions
 

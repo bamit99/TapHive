@@ -12,6 +12,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.min
 
 class SyslogSender(private val prefs: Prefs) {
@@ -27,6 +28,17 @@ class SyslogSender(private val prefs: Prefs) {
     @Volatile
     var lastError: String? = null
         private set
+
+    private val forwarded = AtomicLong(0)
+
+    val forwardedEvents: Long
+        get() = forwarded.get()
+
+    fun resetForwardedCount() {
+        // Drop any unsent events from the previous session before counting the new one.
+        queue.clear()
+        forwarded.set(0)
+    }
 
     /** Network used for syslog traffic so it never enters our own VPN tunnel. */
     @Volatile
@@ -98,7 +110,11 @@ class SyslogSender(private val prefs: Prefs) {
         val host = Build.MODEL.replace(Regex("[^A-Za-z0-9_.-]"), "_")
         val app = prefs.appName.replace(Regex("[^A-Za-z0-9_.-]"), "_")
         val json = if (event.event.startsWith("capture_")) {
-            event.copy(droppedEvents = dropped).toJson()
+            event.copy(
+                droppedEvents = dropped,
+                // Snapshot at send time so queued flow-close events are included.
+                eventsForwarded = if (event.event == "capture_stop") forwarded.get() else event.eventsForwarded
+            ).toJson()
         } else {
             event.toJson()
         }
@@ -115,6 +131,7 @@ class SyslogSender(private val prefs: Prefs) {
         try {
             val bytes = message.toByteArray(Charsets.UTF_8)
             if (prefs.transport == "tcp") sendTcp(bytes) else sendUdp(bytes)
+            forwarded.incrementAndGet()
             retryDelayMs = 1000L
             lastError = null
         } catch (e: Exception) {
