@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">TapHive</string>
+    <string name="title">TAP HIVE</string>
+    <string name="subtitle">PRIVATE NETWORK TELEMETRY</string>
+    <string name="status_idle">CAPTURE OFFLINE</string>
+    <string name="status_running">CAPTURE LIVE</string>
+    <string name="start_capture">START CAPTURE</string>
+    <string name="stop_capture">STOP CAPTURE</string>
+    <string name="settings">SYSLOG TARGET</string>
+    <string name="footer">PHASE 1 · METADATA ONLY · NO PAYLOAD</string>
+    <string name="channel_name">TapHive capture</string>
+    <string name="notification_title">TapHive is capturing</string>
+    <string name="notification_text">Forwarding flow metadata to syslog</string>
+    <string name="settings_title">SYSLOG TARGET</string>
+</resources>

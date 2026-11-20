@@ -1,0 +1,54 @@
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/bg_main</item>
+        <item name="android:colorAccent">@color/neon_cyan</item>
+        <item name="android:textColorPrimary">@color/neon_text</item>
+        <item name="android:textColorSecondary">@color/neon_muted</item>
+        <item name="android:statusBarColor">@color/neon_bg</item>
+        <item name="android:navigationBarColor">@color/neon_bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <style name="NeonTitle">
+        <item name="android:textColor">@color/neon_cyan</item>
+        <item name="android:textSize">34sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.18</item>
+        <item name="android:shadowColor">@color/neon_cyan</item>
+        <item name="android:shadowDx">0</item>
+        <item name="android:shadowDy">0</item>
+        <item name="android:shadowRadius">14</item>
+    </style>
+
+    <style name="NeonSubtitle">
+        <item name="android:textColor">@color/neon_muted</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.28</item>
+    </style>
+
+    <style name="NeonLabel">
+        <item name="android:textColor">@color/neon_muted</item>
+        <item name="android:textSize">11sp</item>
+        <item name="android:letterSpacing">0.12</item>
+    </style>
+
+    <style name="NeonButton">
+        <item name="android:textColor">@color/neon_text</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:minHeight">52dp</item>
+        <item name="android:shadowColor">@color/neon_cyan</item>
+        <item name="android:shadowDx">0</item>
+        <item name="android:shadowDy">0</item>
+        <item name="android:shadowRadius">8</item>
+    </style>
+
+    <style name="NeonField">
+        <item name="android:textColor">@color/neon_text</item>
+        <item name="android:textColorHint">@color/neon_muted</item>
+        <item name="android:background">@drawable/neon_field</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+</resources>

@@ -1,0 +1,4 @@
+TapHive
+Copyright 2026 Amit Bhatnagar
+
+This product is a clean-room Phase 1 implementation for capturing network flow metadata and forwarding it as syslog events.
