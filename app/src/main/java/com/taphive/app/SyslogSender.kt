@@ -26,6 +26,9 @@ class SyslogSender(private val prefs: Prefs) {
     private var dropped = 0L
 
     @Volatile
+    private var backoffDropped = 0L
+
+    @Volatile
     var lastError: String? = null
         private set
 
@@ -35,8 +38,8 @@ class SyslogSender(private val prefs: Prefs) {
         get() = forwarded.get()
 
     fun resetForwardedCount() {
-        // Drop any unsent events from the previous session before counting the new one.
-        queue.clear()
+        // Keep the queue: an unsent capture_stop from the previous session must still
+        // be delivered. Only the forward counter is scoped to the new session.
         forwarded.set(0)
     }
 
@@ -124,8 +127,8 @@ class SyslogSender(private val prefs: Prefs) {
     private fun send(message: String) {
         val now = System.currentTimeMillis()
         if (now < nextRetryMs) {
-            dropped++
-            lastError = "syslog backoff active; dropped $dropped events"
+            backoffDropped++
+            lastError = "syslog backoff active; dropped $backoffDropped events"
             return
         }
         try {

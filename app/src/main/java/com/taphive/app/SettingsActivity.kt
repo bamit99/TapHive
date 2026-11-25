@@ -38,8 +38,12 @@ class SettingsActivity : Activity() {
         appName.setText(prefs.appName)
 
         findViewById<Button>(R.id.save).setOnClickListener {
-            val portValue = port.text.toString().toIntOrNull() ?: 514
-            val facilityValue = facility.text.toString().toIntOrNull() ?: 13
+            val portValue = port.text.toString().toIntOrNull()
+            val facilityValue = facility.text.toString().toIntOrNull()
+            if (portValue == null || facilityValue == null) {
+                error.text = "Port and facility must be numbers"
+                return@setOnClickListener
+            }
             if (enabled.isChecked) {
                 val problem = prefs.validate(host.text.toString(), portValue, facilityValue)
                 if (problem != null) {

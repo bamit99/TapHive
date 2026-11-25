@@ -6,11 +6,11 @@ TapHive is a clean-room Android app that captures **network flow metadata** on a
 
 ## Highlights
 
-- Local `VpnService` with IPv4/IPv6 split routes and a persistent foreground notification.
-- Pure Kotlin `PacketReader` over the VPN fd: IPv4/IPv6 headers, TCP/UDP/SCTP ports, canonical flow keys, 30-second idle expiry.
+- Local `VpnService` with IPv4 split routes, transparent TCP/UDP forwarding, and a persistent foreground notification. IPv6 routing is deferred until the forwarder supports it.
+- Pure Kotlin `PacketReader` over the VPN fd: IPv4/IPv6 headers, TCP/UDP/SCTP ports, canonical flow keys, 30-second idle expiry. With IPv6 routes removed, live capture currently sees IPv4 only.
 - Numeric uid attribution through `ConnectivityManager.getConnectionOwnerUid`; no package-visibility permission in Phase 1.
 - Syslog forwarding over UDP or TCP, disabled by default, with facility/severity settings, bounded queue, rate limiting, and reconnect backoff.
-- Syslog socket is bound to the underlying Wi-Fi/cellular/Ethernet network so it never loops back into TapHive's own metadata-only tunnel.
+- Syslog socket is bound to the underlying Wi-Fi/cellular/Ethernet network so it never loops back into TapHive's own tunnel. Captured TCP/UDP traffic is relayed through protected sockets on that network and rewritten back into the tun, so device connectivity is preserved.
 - Dark neon UI with live capture state, pulsing status indicator, sender-error display, and aggregate counters.
 - Live counters show raw packets captured from the VPN fd and syslog events successfully forwarded; the same totals are included on `capture_start`/`capture_stop` events.
 - No third-party runtime dependencies; only the Android Gradle plugin and Kotlin plugin are used at build time.
@@ -23,11 +23,10 @@ Device traffic
     ▼
 VpnService tun fd
     │
-    ▼
-PacketReader (Kotlin) ──► Flow registry + UidResolver
+    ├──► PacketReader (Kotlin) ──► Flow registry + UidResolver ──► SyslogSender ──► UDP/TCP 514 ──► SIEM
     │
-    ▼
-SyslogSender ──► UDP/TCP 514 ──► SIEM / log receiver
+    └──► Ipv4TunnelForwarder ──► protected TCP/UDP sockets ──► underlying network
+             └──► rewritten replies written back to the tun fd
 ```
 
 Key source files:
@@ -39,6 +38,9 @@ app/src/main/java/com/taphive/app/
 ├── SettingsActivity.kt  # syslog target configuration
 ├── CaptureService.kt    # VpnService lifecycle + flow sink
 ├── PacketReader.kt      # Kotlin IP/transport parser + flow tracking
+├── Ipv4TunnelForwarder.kt # transparent IPv4 TCP/UDP NAT back to the real network
+├── TunWriter.kt         # synchronized tun packet writer
+├── IpPacket.kt          # shared endpoint/packet model
 ├── UidResolver.kt       # numeric uid attribution
 ├── SyslogSender.kt      # RFC 3164 formatter, queue, rate limit, sockets
 ├── SyslogEvent.kt       # th_* JSON schema v2

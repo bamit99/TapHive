@@ -31,7 +31,13 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         createChannel()
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onBind(intent: Intent?): IBinder? =
+        if (intent?.action == VpnService.SERVICE_INTERFACE) super.onBind(intent) else null
+
+    override fun onRevoke() {
+        releaseCapture(emitLifecycle = true)
+        stopSelf()
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -48,15 +54,14 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         // Bind syslog traffic to the real network before the VPN becomes the default route.
         app.sender.network = underlyingNetwork()
 
+        // IPv6 routing is deferred until the forwarder handles IPv6; leaving these
+        // routes installed without a forwarding path would blackhole IPv6 traffic.
         val builder = Builder()
             .setSession("TapHive")
             .setMtu(1500)
             .addAddress("10.0.0.2", 30)
             .addRoute("0.0.0.0", 1)
             .addRoute("128.0.0.0", 1)
-            .addAddress("fd00::2", 64)
-            .addRoute("2000::", 3)
-            .addRoute("fc00::", 7)
             .setMetered(false)
 
         val fd = try {
@@ -85,7 +90,13 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         }
         isRunning = true
         app.sender.enqueue(captureEvent("capture_start", includeTotals = true))
-        reader = PacketReader(fd, this).also { it.start() }
+        val forwarder = Ipv4TunnelForwarder(
+            vpn = this,
+            network = app.sender.network,
+            tun = TunWriter(fd.fileDescriptor),
+            onInbound = { packet, length -> reader?.recordInbound(packet, length) }
+        )
+        reader = PacketReader(fd, this, forwarder).also { it.start() }
     }
 
     override fun onPacketCaptured(total: Long) {
@@ -100,14 +111,9 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         srcIp: String,
         srcPort: Int,
         dstIp: String,
-        dstPort: Int,
-        srcIsLocal: Boolean
+        dstPort: Int
     ) {
-        val localIp = if (srcIsLocal) srcIp else dstIp
-        val localPort = if (srcIsLocal) srcPort else dstPort
-        val remoteIp = if (srcIsLocal) dstIp else srcIp
-        val remotePort = if (srcIsLocal) dstPort else srcPort
-        val uid = uidResolver.resolve(protocol, localIp, localPort, remoteIp, remotePort)
+        val uid = uidResolver.resolve(protocol, srcIp, srcPort, dstIp, dstPort)
 
         app.sender.enqueue(
             SyslogEvent(
@@ -201,19 +207,22 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
     }
 
     private fun releaseCapture(emitLifecycle: Boolean) {
-        reader?.stop()
-        CaptureService.packetsCaptured = reader?.packetsCaptured ?: CaptureService.packetsCaptured
-        reader = null
-        if (emitLifecycle && isRunning) {
-            app.sender.enqueue(captureEvent("capture_stop", includeTotals = true))
+        synchronized(this) {
+            if (!isRunning && reader == null && pfd == null) return
+            reader?.stop()
+            CaptureService.packetsCaptured = reader?.packetsCaptured ?: CaptureService.packetsCaptured
+            reader = null
+            if (emitLifecycle && isRunning) {
+                app.sender.enqueue(captureEvent("capture_stop", includeTotals = true))
+            }
+            try {
+                pfd?.close()
+            } catch (_: Exception) {
+            }
+            pfd = null
+            isRunning = false
+            stopForeground(STOP_FOREGROUND_REMOVE)
         }
-        try {
-            pfd?.close()
-        } catch (_: Exception) {
-        }
-        pfd = null
-        isRunning = false
-        stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
     override fun onDestroy() {

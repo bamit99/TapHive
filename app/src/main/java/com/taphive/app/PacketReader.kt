@@ -17,7 +17,10 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class PacketReader(
     private val pfd: ParcelFileDescriptor,
-    private val sink: FlowSink
+    private val sink: FlowSink,
+    private val forwarder: TunnelForwarder? = null,
+    private val localIpv4: String = "10.0.0.2",
+    private val localIpv6: String = "fd00::2"
 ) {
     interface FlowSink {
         fun onPacketCaptured(total: Long)
@@ -30,8 +33,7 @@ class PacketReader(
             srcIp: String,
             srcPort: Int,
             dstIp: String,
-            dstPort: Int,
-            srcIsLocal: Boolean
+            dstPort: Int
         )
 
         fun onFlowClose(
@@ -44,19 +46,6 @@ class PacketReader(
             status: String
         )
     }
-
-    private data class Endpoint(
-        val family: Int,
-        val address: String,
-        val ip: String,
-        val port: Int
-    )
-
-    private data class Packet(
-        val protocol: Int,
-        val src: Endpoint,
-        val dst: Endpoint
-    )
 
     private class Flow(
         val id: Long,
@@ -78,7 +67,7 @@ class PacketReader(
     val packetsCaptured: Long
         get() = capturedPackets.get()
 
-    private val flows = LinkedHashMap<String, Flow>()
+    private val flows = java.util.concurrent.ConcurrentHashMap<String, Flow>()
     private var nextFlowId = 0L
     private var input: FileInputStream? = null
     private var thread: Thread? = null
@@ -93,6 +82,7 @@ class PacketReader(
 
     fun stop() {
         if (!running.compareAndSet(true, false)) return
+        forwarder?.stop()
         try {
             input?.close()
         } catch (_: IOException) {
@@ -136,6 +126,7 @@ class PacketReader(
                 val packet = parse(buffer, count)
                 if (packet != null) {
                     handle(packet, count.toLong(), now)
+                    forwarder?.forward(packet, buffer, count)
                 }
                 expire(now, false)
             }
@@ -145,7 +136,7 @@ class PacketReader(
         }
     }
 
-    private fun handle(packet: Packet, length: Long, now: Long) {
+    private fun handle(packet: IpPacket, length: Long, now: Long) {
         val key = flowKey(packet.src, packet.dst, packet.protocol)
         val flow = flows[key] ?: createFlow(key, packet, now).also { flows[key] = it }
         if (flow.local.address == packet.src.address && flow.local.port == packet.src.port) {
@@ -158,9 +149,17 @@ class PacketReader(
         flow.lastSeen = now
     }
 
-    private fun createFlow(key: String, packet: Packet, now: Long): Flow {
-        // The first packet's source is treated as local for uid attribution.
-        val flow = Flow(++nextFlowId, key, packet.src, packet.dst, packet.protocol, now)
+    /** Accounts for payload delivered by the forwarder from the remote side. */
+    fun recordInbound(packet: IpPacket, length: Int) {
+        val flow = flows[flowKey(packet.src, packet.dst, packet.protocol)] ?: return
+        flow.bytesReceived += length
+        flow.packetsReceived++
+    }
+
+    private fun createFlow(key: String, packet: IpPacket, now: Long): Flow {
+        val local = if (packet.src.ip == localIpv4 || packet.src.ip == localIpv6) packet.src else packet.dst
+        val remote = if (local === packet.src) packet.dst else packet.src
+        val flow = Flow(++nextFlowId, key, local, remote, packet.protocol, now)
         safeEmit {
             sink.onFlowOpen(
                 flow.id,
@@ -170,8 +169,7 @@ class PacketReader(
                 flow.local.ip,
                 flow.local.port,
                 flow.remote.ip,
-                flow.remote.port,
-                true
+                flow.remote.port
             )
         }
         return flow
@@ -205,7 +203,7 @@ class PacketReader(
         }
     }
 
-    private fun parse(bytes: ByteArray, length: Int): Packet? {
+    private fun parse(bytes: ByteArray, length: Int): IpPacket? {
         if (length < 1) return null
         return when (bytes[0].toInt() ushr 4) {
             4 -> parseIpv4(bytes, length)
@@ -214,20 +212,20 @@ class PacketReader(
         }
     }
 
-    private fun parseIpv4(bytes: ByteArray, length: Int): Packet? {
+    private fun parseIpv4(bytes: ByteArray, length: Int): IpPacket? {
         if (length < 20) return null
         val headerLength = (bytes[0].toInt() and 0x0f) * 4
         if (headerLength < 20 || headerLength > length) return null
         val protocol = u8(bytes, 9)
         val (sport, dport) = transportPorts(bytes, length, headerLength, protocol)
-        return Packet(
+        return IpPacket(
             protocol,
             endpoint(4, bytes.copyOfRange(12, 16), sport),
             endpoint(4, bytes.copyOfRange(16, 20), dport)
         )
     }
 
-    private fun parseIpv6(bytes: ByteArray, length: Int): Packet? {
+    private fun parseIpv6(bytes: ByteArray, length: Int): IpPacket? {
         if (length < 40) return null
         var offset = 40
         var next = u8(bytes, 6)
@@ -240,7 +238,7 @@ class PacketReader(
             next = following
         }
         val (sport, dport) = transportPorts(bytes, length, offset, next)
-        return Packet(
+        return IpPacket(
             next,
             endpoint(6, bytes.copyOfRange(8, 24), sport),
             endpoint(6, bytes.copyOfRange(24, 40), dport)
