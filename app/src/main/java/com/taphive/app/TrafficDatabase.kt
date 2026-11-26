@@ -37,6 +37,19 @@ class TrafficDatabase(
         val flows: Long
     )
 
+    data class IpMeta(
+        val ip: String,
+        val country: String?,
+        val region: String?,
+        val city: String?,
+        val asn: Int?,
+        val org: String?,
+        val isp: String?,
+        val provider: String?,
+        val dnsName: String?,
+        val updatedAt: Long
+    )
+
     init {
         setWriteAheadLoggingEnabled(true)
     }
@@ -58,7 +71,12 @@ class TrafficDatabase(
             "CREATE TABLE ip_meta (" +
                 "ip TEXT PRIMARY KEY," +
                 "country TEXT," +
+                "region TEXT," +
+                "city TEXT," +
+                "asn INTEGER," +
                 "org TEXT," +
+                "isp TEXT," +
+                "provider TEXT," +
                 "dns_name TEXT," +
                 "updated_at INTEGER NOT NULL)"
         )
@@ -70,6 +88,13 @@ class TrafficDatabase(
             db.execSQL("ALTER TABLE flows ADD COLUMN flow_id TEXT NOT NULL DEFAULT ''")
             createIndexes(db)
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_ip_meta_updated ON ip_meta(updated_at)")
+        }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE ip_meta ADD COLUMN region TEXT")
+            db.execSQL("ALTER TABLE ip_meta ADD COLUMN city TEXT")
+            db.execSQL("ALTER TABLE ip_meta ADD COLUMN asn INTEGER")
+            db.execSQL("ALTER TABLE ip_meta ADD COLUMN isp TEXT")
+            db.execSQL("ALTER TABLE ip_meta ADD COLUMN provider TEXT")
         }
     }
 
@@ -141,15 +166,59 @@ class TrafficDatabase(
     }
 
     fun upsertGeo(ip: String, country: String?, org: String?) {
+        upsertGeo(ip, country, null, null, null, org, null, null)
+    }
+
+    fun upsertGeo(
+        ip: String,
+        country: String?,
+        region: String?,
+        city: String?,
+        asn: Int?,
+        org: String?,
+        isp: String?,
+        provider: String?
+    ) {
         if (prefs.retentionHours <= 0) return
         writableDatabase.execSQL(
-            "INSERT INTO ip_meta(ip, country, org, updated_at) VALUES(?, ?, ?, ?) " +
+            "INSERT INTO ip_meta(ip, country, region, city, asn, org, isp, provider, updated_at) " +
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?) " +
                 "ON CONFLICT(ip) DO UPDATE SET " +
                 "country = COALESCE(excluded.country, ip_meta.country), " +
+                "region = COALESCE(excluded.region, ip_meta.region), " +
+                "city = COALESCE(excluded.city, ip_meta.city), " +
+                "asn = COALESCE(excluded.asn, ip_meta.asn), " +
                 "org = COALESCE(excluded.org, ip_meta.org), " +
+                "isp = COALESCE(excluded.isp, ip_meta.isp), " +
+                "provider = COALESCE(excluded.provider, ip_meta.provider), " +
                 "updated_at = excluded.updated_at",
-            arrayOf<Any?>(ip, country, org, System.currentTimeMillis())
+            arrayOf<Any?>(
+                ip, country, region, city, asn, org, isp, provider,
+                System.currentTimeMillis()
+            )
         )
+    }
+
+    fun ipMeta(ip: String): IpMeta? {
+        readableDatabase.rawQuery(
+            "SELECT ip, country, region, city, asn, org, isp, provider, dns_name, updated_at " +
+                "FROM ip_meta WHERE ip = ? LIMIT 1",
+            arrayOf(ip)
+        ).use { cursor ->
+            if (!cursor.moveToFirst()) return null
+            return IpMeta(
+                ip = cursor.getString(0),
+                country = cursor.getString(1),
+                region = cursor.getString(2),
+                city = cursor.getString(3),
+                asn = if (cursor.isNull(4)) null else cursor.getInt(4),
+                org = cursor.getString(5),
+                isp = cursor.getString(6),
+                provider = cursor.getString(7),
+                dnsName = cursor.getString(8),
+                updatedAt = cursor.getLong(9)
+            )
+        }
     }
 
     fun upsertDnsName(ip: String, name: String) {
@@ -249,7 +318,7 @@ class TrafficDatabase(
 
     private companion object {
         const val DB_NAME = "taphive_history.db"
-        const val DB_VERSION = 2
+        const val DB_VERSION = 3
         const val PRUNE_INTERVAL_MS = 60_000L
         const val META_TTL_MS = 30L * 24 * 3_600_000L
     }

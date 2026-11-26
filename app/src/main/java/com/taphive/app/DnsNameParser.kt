@@ -11,6 +11,31 @@ import java.util.LinkedHashMap
  * fallback label for those endpoints.
  */
 class DnsNameParser {
+    data class Query(val id: Int, val name: String, val type: Int)
+
+    /** Extract the first question without storing or emitting the name. */
+    fun parseQuery(payload: ByteArray, length: Int): Query? {
+        if (length < 12) return null
+        val flags = u16(payload, 2)
+        if (flags and 0x8000 != 0) return null
+        if (u16(payload, 4) <= 0) return null
+        val parsed = readName(payload, 12, length) ?: return null
+        if (parsed.second + 4 > length) return null
+        return Query(
+            id = u16(payload, 0),
+            name = parsed.first,
+            type = u16(payload, parsed.second)
+        )
+    }
+
+    /** DNS RCODE from a response, or null if this is not a response. */
+    fun responseCode(payload: ByteArray, length: Int): Int? {
+        if (length < 12) return null
+        val flags = u16(payload, 2)
+        if (flags and 0x8000 == 0) return null
+        return flags and 0x000f
+    }
+
     /** ip -> hostname, first answer wins. */
     fun parse(payload: ByteArray, length: Int): Map<String, String> {
         if (length < 12) return emptyMap()

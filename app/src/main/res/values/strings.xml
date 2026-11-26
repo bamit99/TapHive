@@ -62,4 +62,27 @@
     <string name="syslog_enable_label">Enable syslog forwarding</string>
     <string name="country_enrichment_off_hint">EXTERNAL ENRICHMENT OFF · ENABLE IT IN SYSLOG TARGET</string>
     <string name="country_history_off_hint">LOCAL HISTORY OFF · ENABLE IT IN SYSLOG TARGET</string>
+    <string name="about_diagnostics">DNS DIAGNOSTICS</string>
+    <string name="about_diagnostics_title">DNS diagnostics</string>
+    <string name="about_diagnostics_close">CLOSE</string>
+    <string name="about_diagnostics_note">Counters are from the current process. DNS names are not stored in this log.</string>
+    <string name="about_data_sources">DATA SOURCES · IPWHO.IS</string>
+    <string name="ip_detail_title">DESTINATION</string>
+    <string name="ip_detail_subtitle">IP INTELLIGENCE</string>
+    <string name="ip_detail_endpoint">ENDPOINT</string>
+    <string name="ip_detail_app">APPLICATION</string>
+    <string name="ip_detail_traffic">TRAFFIC</string>
+    <string name="ip_detail_dns">DNS NAME</string>
+    <string name="ip_detail_location">LOCATION</string>
+    <string name="ip_detail_network">NETWORK</string>
+    <string name="ip_detail_source">SOURCE</string>
+    <string name="ip_detail_no_dns">NO DNS NAME OBSERVED</string>
+    <string name="ip_detail_no_location">NO LOCATION DATA</string>
+    <string name="ip_detail_looking_up">LOOKING UP VIA IPWHO.IS</string>
+    <string name="ip_detail_lookup_off">EXTERNAL ENRICHMENT OFF</string>
+    <string name="ip_detail_refresh">REFRESH LOOKUP</string>
+    <string name="ip_detail_enable">ENABLE EXTERNAL ENRICHMENT</string>
+    <string name="ip_detail_data_source">DATA SOURCE · IPWHO.IS</string>
+    <string name="ip_detail_attribution">IP geolocation is optional, approximate, and provided by ipwho.is.</string>
+    <string name="ip_detail_updated">UPDATED</string>
 </resources>

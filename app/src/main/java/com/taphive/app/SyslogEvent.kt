@@ -28,7 +28,14 @@ data class SyslogEvent(
     val status: String? = null,
     val droppedEvents: Long? = null,
     val packetsCaptured: Long? = null,
-    val eventsForwarded: Long? = null
+    val eventsForwarded: Long? = null,
+    val dnsQueries: Long? = null,
+    val dnsResponses: Long? = null,
+    val dnsTimeouts: Long? = null,
+    val dnsNxdomain: Long? = null,
+    val dnsServfail: Long? = null,
+    val dnsOtherErrors: Long? = null,
+    val dnsMalformed: Long? = null
 ) {
     fun toJson(): String = JSONObject().apply {
         put("th_schema_version", 2)
@@ -51,6 +58,13 @@ data class SyslogEvent(
         putNullable("th_dropped_events", droppedEvents)
         putNullable("th_packets_captured", packetsCaptured)
         putNullable("th_events_forwarded", eventsForwarded)
+        putNullable("th_dns_queries", dnsQueries)
+        putNullable("th_dns_responses", dnsResponses)
+        putNullable("th_dns_timeouts", dnsTimeouts)
+        putNullable("th_dns_nxdomain", dnsNxdomain)
+        putNullable("th_dns_servfail", dnsServfail)
+        putNullable("th_dns_other_errors", dnsOtherErrors)
+        putNullable("th_dns_malformed", dnsMalformed)
     }.toString()
 }
 

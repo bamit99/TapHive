@@ -264,15 +264,36 @@ class TrafficActivity : Activity() {
                 append(" · port ${row.port} · ${protocolName(row.protocol)}")
                 row.country?.let { append(" · $it") }
             }
-            addRow(container, label, subText, formatBytes(row.bytes))
+            addRow(
+                container,
+                label,
+                subText,
+                formatBytes(row.bytes),
+                onClick = { openDetail(row) }
+            )
         }
+    }
+
+    private fun openDetail(row: TrafficDatabase.DestinationRow) {
+        startActivity(
+            Intent(this, IpDetailActivity::class.java).apply {
+                putExtra(IpDetailActivity.EXTRA_IP, row.ip)
+                putExtra(IpDetailActivity.EXTRA_PORT, row.port)
+                putExtra(IpDetailActivity.EXTRA_PROTOCOL, row.protocol)
+                putExtra(IpDetailActivity.EXTRA_UID, row.uid)
+                putExtra(IpDetailActivity.EXTRA_BYTES, row.bytes)
+                putExtra(IpDetailActivity.EXTRA_FLOWS, row.flows)
+                putExtra(IpDetailActivity.EXTRA_DNS, row.dnsName)
+            }
+        )
     }
 
     private fun addRow(
         container: LinearLayout,
         labelText: String,
         subText: String,
-        bytesText: String
+        bytesText: String,
+        onClick: (() -> Unit)? = null
     ) {
         val rowView = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -309,6 +330,10 @@ class TrafficActivity : Activity() {
             textSize = 12f
             setTypeface(android.graphics.Typeface.DEFAULT_BOLD)
         })
+        if (onClick != null) {
+            rowView.isClickable = true
+            rowView.setOnClickListener { onClick() }
+        }
         container.addView(rowView)
     }
 

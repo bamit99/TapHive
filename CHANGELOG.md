@@ -1,6 +1,16 @@
 # Changelog
 
-All notable changes to TapHive are recorded here. v1.1.2 is release-signed; the v1.1 core was device-verified on Android 16. The v1.1.1/v1.1.2 changes are build/unit-test verified while the test device was offline.
+All notable changes to TapHive are recorded here. v1.2.0 is release-signed; the v1.1 core was device-verified on Android 16. v1.2.0 adds DNS diagnostics, per-IP detail, and external-service attribution; its device validation is pending while the test phone is offline.
+
+## [1.2.0] — DNS diagnostics and IP drill-down
+
+- Added aggregate DNS health counters: queries, responses, timeouts, NXDOMAIN, SERVFAIL, other errors, malformed. Query names are not stored or emitted.
+- Added `th_dns_*` counters to `capture_start`/`capture_stop` syslog events and an **ABOUT → DNS DIAGNOSTICS** view.
+- Added a tappable per-destination IP detail screen: DNS name, country/region/city, ASN/org/ISP, provider, timestamp, refresh, and optional lookup.
+- Extended `ip_meta` to schema v3 with region, city, ASN, ISP, and provider, preserving existing data.
+- Added visible ipwho.is attribution and a data-source button in About, plus README data-source disclosure.
+- Added DNS diagnostics unit tests. Current JVM coverage: 17 tests.
+- No syslog schema/version change; the new `th_dns_*` fields are additive.
 
 ## [1.1.2] — Country backfill and retry
 

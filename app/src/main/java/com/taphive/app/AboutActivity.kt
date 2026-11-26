@@ -38,6 +38,38 @@ class AboutActivity : Activity() {
         }
 
         findViewById<Button>(R.id.license).setOnClickListener { showLicense() }
+        findViewById<Button>(R.id.data_sources).setOnClickListener {
+            openExternally(
+                Intent(Intent.ACTION_VIEW, Uri.parse("https://ipwho.is/")),
+                "Open ipwho.is"
+            )
+        }
+        findViewById<Button>(R.id.diagnostics).setOnClickListener { showDiagnostics() }
+    }
+
+    private fun showDiagnostics() {
+        val snapshot = (application as TapHiveApp).dnsDiagnostics.snapshot()
+        val body = buildString {
+            append("QUERIES  ").append(snapshot.queries).append('\n')
+            append("RESPONSES  ").append(snapshot.responses).append('\n')
+            append("TIMEOUTS  ").append(snapshot.timeouts).append('\n')
+            append("NXDOMAIN  ").append(snapshot.nxdomain).append('\n')
+            append("SERVFAIL  ").append(snapshot.servfail).append('\n')
+            append("OTHER ERRORS  ").append(snapshot.otherErrors).append('\n')
+            append("MALFORMED  ").append(snapshot.malformed).append("\n\n")
+            append(getString(R.string.about_diagnostics_note))
+        }
+        val text = TextView(this).apply {
+            this.text = body
+            textSize = 13f
+            setTextColor(Color.parseColor("#E6F4FF"))
+            setPadding(48, 24, 48, 24)
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.about_diagnostics_title)
+            .setView(text)
+            .setPositiveButton(R.string.about_diagnostics_close, null)
+            .show()
     }
 
     private fun openExternally(intent: Intent, chooser: String) {

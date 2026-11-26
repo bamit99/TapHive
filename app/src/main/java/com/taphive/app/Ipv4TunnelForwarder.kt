@@ -38,7 +38,7 @@ class Ipv4TunnelForwarder(
     private val tun: TunWriter,
     private val onInbound: (IpPacket, Int) -> Unit,
     private val localIp: String = "10.0.0.2",
-    private val onUdpPayload: (Int, ByteArray, Int) -> Unit = { _, _, _ -> }
+    private val onUdpPacket: (Boolean, String, Int, ByteArray, Int) -> Unit = { _, _, _, _, _ -> }
 ) : TunnelForwarder {
 
     @Volatile
@@ -105,7 +105,7 @@ class Ipv4TunnelForwarder(
                         socket.receive(packet)
                         val payload = packet.data.copyOfRange(packet.offset, packet.offset + packet.length)
                         try {
-                            onUdpPayload(key.remotePort, payload, payload.size)
+                            onUdpPacket(true, key.remoteIp, key.remotePort, payload, payload.size)
                         } catch (_: Exception) {
                             // A malformed DNS response must not kill forwarding.
                         }
@@ -441,7 +441,14 @@ class Ipv4TunnelForwarder(
             is UdpSession -> {
                 // Skip the IP header and the 8-byte UDP header.
                 val payload = raw.copyOfRange(headerLength + 8, totalLength)
-                if (payload.isNotEmpty()) active.send(payload)
+                if (payload.isNotEmpty()) {
+                    try {
+                        onUdpPacket(false, key.remoteIp, key.remotePort, payload, payload.size)
+                    } catch (_: Exception) {
+                        // Diagnostics must never block forwarding.
+                    }
+                    active.send(payload)
+                }
             }
             is TcpSession -> handleTcp(active, raw, headerLength, totalLength)
         }

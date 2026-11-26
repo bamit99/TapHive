@@ -107,14 +107,18 @@ class IpGeoResolver(
                 return
             }
             val country = json.optString("country").ifBlank { null }
+            val region = json.optString("region").ifBlank { null }
+            val city = json.optString("city").ifBlank { null }
             val connection = json.optJSONObject("connection")
+            val asn = connection?.optInt("asn", 0)?.takeIf { value -> value > 0 }
             val org = connection?.let {
                 sequenceOf(it.optString("org"), it.optString("isp"))
                     .firstOrNull { value -> value.isNotBlank() }
-                    ?: it.optInt("asn", 0).takeIf { asn -> asn > 0 }?.let { asn -> "AS$asn" }
+                    ?: asn?.let { value -> "AS$value" }
             }
+            val isp = connection?.optString("isp")?.ifBlank { null }
             if (country != null || org != null) {
-                database.upsertGeo(ip, country, org)
+                database.upsertGeo(ip, country, region, city, asn, org, isp, "ipwho.is")
                 resolvedAt[ip] = System.currentTimeMillis()
                 retryAt.remove(ip)
             } else {
@@ -145,7 +149,7 @@ class IpGeoResolver(
     }
 
     private fun fetch(ip: String): HttpResult {
-        val url = URL(BASE_URL + ip + "?fields=success,country,connection")
+        val url = URL(BASE_URL + ip + "?fields=success,country,region,city,connection")
         val connection = (network?.openConnection(url) ?: url.openConnection())
             as? HttpsURLConnection ?: throw IOException("enrichment requires HTTPS")
         try {

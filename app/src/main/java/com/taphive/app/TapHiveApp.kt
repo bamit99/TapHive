@@ -15,6 +15,8 @@ class TapHiveApp : Application() {
         private set
     lateinit var appNameResolver: AppNameResolver
         private set
+    lateinit var dnsDiagnostics: DnsDiagnostics
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -26,6 +28,7 @@ class TapHiveApp : Application() {
         tracker = TrafficTracker()
         geoResolver = IpGeoResolver(database)
         appNameResolver = AppNameResolver(this)
+        dnsDiagnostics = DnsDiagnostics(DnsNameParser())
 
         // Capture resume is driven by MainActivity (explicit foreground entry) or
         // by the service's null-intent restart. Do not start from Application.onCreate:

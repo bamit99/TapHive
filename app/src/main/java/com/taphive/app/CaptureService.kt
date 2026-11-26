@@ -123,6 +123,7 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         app.tracker.reset()
         CaptureService.packetsCaptured = 0L
         app.sender.resetForwardedCount()
+        app.dnsDiagnostics.reset()
         isRunning = true
         starting = false
         app.sender.enqueue(captureEvent("capture_start", includeTotals = true))
@@ -131,8 +132,9 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
             network = app.sender.network,
             tun = TunWriter(fd.fileDescriptor),
             onInbound = { packet, length -> reader?.recordInbound(packet, length) },
-            onUdpPayload = { port, payload, length ->
-                if (port == 53 && app.prefs.retentionHours > 0) {
+            onUdpPacket = { fromRemote, serverIp, remotePort, payload, length ->
+                app.dnsDiagnostics.observe(fromRemote, serverIp, payload, length)
+                if (fromRemote && remotePort == 53 && app.prefs.retentionHours > 0) {
                     dnsParser.parse(payload, length).forEach { (ip, name) ->
                         app.database.upsertDnsName(ip, name)
                     }
@@ -183,6 +185,7 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
 
     override fun onPacketCaptured(total: Long) {
         CaptureService.packetsCaptured = total
+        app.dnsDiagnostics.expire()
     }
 
     override fun onFlowOpen(
@@ -277,12 +280,22 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
 
     private fun underlyingNetwork(): Network? = Networks.underlying(this)
 
-    private fun captureEvent(name: String, includeTotals: Boolean = false) = SyslogEvent(
-        sessionId = sessionId,
-        event = name,
-        packetsCaptured = if (includeTotals) CaptureService.packetsCaptured else null,
-        eventsForwarded = if (includeTotals) app.sender.forwardedEvents else null
-    )
+    private fun captureEvent(name: String, includeTotals: Boolean = false): SyslogEvent {
+        val dns = if (includeTotals) app.dnsDiagnostics.snapshot() else null
+        return SyslogEvent(
+            sessionId = sessionId,
+            event = name,
+            packetsCaptured = if (includeTotals) CaptureService.packetsCaptured else null,
+            eventsForwarded = if (includeTotals) app.sender.forwardedEvents else null,
+            dnsQueries = dns?.queries,
+            dnsResponses = dns?.responses,
+            dnsTimeouts = dns?.timeouts,
+            dnsNxdomain = dns?.nxdomain,
+            dnsServfail = dns?.servfail,
+            dnsOtherErrors = dns?.otherErrors,
+            dnsMalformed = dns?.malformed
+        )
+    }
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

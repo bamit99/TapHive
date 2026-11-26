@@ -2,9 +2,9 @@
 
 TapHive is a clean-room Android app that captures **network flow metadata** on a local VPN interface and forwards it as structured **RFC 3164 or RFC 5424 JSON syslog events**. It also keeps a configurable local history with per-app and destination enrichment.
 
-> **v1.1.2 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.1.2 adds country backfill/retry and a UI clarification. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
+> **v1.2.0 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.2.0 adds DNS diagnostics, per-IP drill-down and attribution. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
 
-**Prebuilt APK:** [`TapHive-1.1.2.apk`](https://github.com/bamit99/TapHive/releases/download/v1.1.2/TapHive-1.1.2.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
+**Prebuilt APK:** [`TapHive-1.2.0.apk`](https://github.com/bamit99/TapHive/releases/download/v1.2.0/TapHive-1.2.0.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
 
 ## Highlights
 
@@ -18,6 +18,7 @@ TapHive is a clean-room Android app that captures **network flow metadata** on a
 - Main screen shows the active syslog format and a target-health indicator: green only with proof (`TCP` connect), yellow for normal/unconfirmed UDP or stale traffic, red for hard errors, dim when forwarding is disabled.
 - Retained local history in SQLite with retention `Off / 1 hour / 6 hours / 24 hours / 7 days` (default `24 hours`), plus a **Clear history** action.
 - TRAFFIC view backed by retained history: pie charts by application and country, top applications, and top destinations grouped by IP/port/protocol/UID.
+- Tap a destination for a per-IP detail card with DNS name (if seen), country/region/city, ASN/org/ISP, source, and refresh. External location lookup is optional and attributed to ipwho.is.
 - Destination labels combine on-device DNS answers with optional HTTPS `ipwho.is` country/organisation metadata. DNS is best-effort; the organisation label is the fallback when no name was observed.
 - Capture resumes after process death when it was left running. Boot resume is opt-in and requires both **Start capture at boot** and capture previously left running.
 - Android 12+ data-extraction rules exclude the history DB and preferences from cloud backup and device transfer; legacy full backup is disabled.
@@ -184,11 +185,18 @@ Lifecycle events also carry aggregate counters:
   "th_schema_version": 2,
   "th_event": "capture_stop",
   "th_packets_captured": 1842,
-  "th_events_forwarded": 61
+  "th_events_forwarded": 61,
+  "th_dns_queries": 42,
+  "th_dns_responses": 40,
+  "th_dns_timeouts": 1,
+  "th_dns_nxdomain": 1,
+  "th_dns_servfail": 0,
+  "th_dns_other_errors": 0,
+  "th_dns_malformed": 0
 }
 ```
 
-The UI shows the same values as `PACKETS n · FORWARDED n`. These are counts only — no packet payloads are emitted.
+The UI shows packet/forward counts as `PACKETS n · FORWARDED n`. DNS counters are aggregate only; query names are not emitted. These are counts only — no packet payloads are emitted.
 
 ## Capture lifecycle
 
@@ -243,7 +251,7 @@ Then:
 ./gradlew :app:assembleRelease
 ```
 
-The signed release APK is `app/build/outputs/apk/release/app-release.apk`. Version metadata is `versionName 1.1.2`, `versionCode 4`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
+The signed release APK is `app/build/outputs/apk/release/app-release.apk`. Version metadata is `versionName 1.2.0`, `versionCode 5`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
 
 ## Install and configure
 
@@ -315,6 +323,16 @@ Permissions declared:
 No `QUERY_ALL_PACKAGES`; package visibility is limited to launcher `MAIN`/`LAUNCHER` queries for UID label resolution.
 
 UDP/TCP syslog are cleartext by design and should only be used on a trusted network. TLS syslog uses the platform trust store and hostname verification; certificate pinning and mTLS are not implemented. External enrichment is HTTPS.
+
+## Data sources and attribution
+
+When the user explicitly enables **External IP enrichment (HTTPS)**, TapHive uses [ipwho.is](https://ipwho.is/) to resolve public destination IPs to country/region/city and ASN/organisation data. The provider receives the destination IP and the device's source IP as part of the HTTPS request. No API key is used.
+
+If enrichment is disabled, TapHive makes no request to ipwho.is. DNS names, when visible, are parsed on-device and are not sent to the provider. IP geolocation is approximate and can be misled by VPNs, CDNs, anycast, and carrier NAT.
+
+## DNS diagnostics
+
+TapHive tracks DNS queries/responses, timeouts, NXDOMAIN, SERVFAIL, other RCODEs, and malformed responses. The aggregate counters are shown in **ABOUT → DNS DIAGNOSTICS** and included in `capture_start`/`capture_stop` syslog events as `th_dns_*` fields. Query names are not stored or emitted.
 
 ## Scope and roadmap
 
