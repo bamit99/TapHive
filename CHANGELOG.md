@@ -9,7 +9,8 @@ All notable changes to TapHive are recorded here. v1.2.0 is release-signed; the 
 - Added a tappable per-destination IP detail screen: DNS name, country/region/city, ASN/org/ISP, provider, timestamp, refresh, and optional lookup.
 - Extended `ip_meta` to schema v3 with region, city, ASN, ISP, and provider, preserving existing data.
 - Added visible ipwho.is attribution and a data-source button in About, plus README data-source disclosure.
-- Added DNS diagnostics unit tests. Current JVM coverage: 17 tests.
+- DNS diagnostics now count only UDP remote port 53; TCP DNS, DoH, and DoT are explicitly out of scope.
+- Added a regression test proving unrelated UDP traffic does not affect DNS counters. Current JVM coverage: 18 tests.
 - No syslog schema/version change; the new `th_dns_*` fields are additive.
 
 ## [1.1.2] — Country backfill and retry

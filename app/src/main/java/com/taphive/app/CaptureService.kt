@@ -133,7 +133,11 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
             tun = TunWriter(fd.fileDescriptor),
             onInbound = { packet, length -> reader?.recordInbound(packet, length) },
             onUdpPacket = { fromRemote, serverIp, remotePort, payload, length ->
-                app.dnsDiagnostics.observe(fromRemote, serverIp, payload, length)
+                if (remotePort == 53) {
+                    app.dnsDiagnostics.observe(
+                        fromRemote, serverIp, remotePort, payload, length
+                    )
+                }
                 if (fromRemote && remotePort == 53 && app.prefs.retentionHours > 0) {
                     dnsParser.parse(payload, length).forEach { (ip, name) ->
                         app.database.upsertDnsName(ip, name)

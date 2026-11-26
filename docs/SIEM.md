@@ -26,6 +26,8 @@ TapHive emits RFC 3164 or RFC 5424 syslog with a JSON `th_*` message. The exampl
 | `th_dns_nxdomain` / `th_dns_servfail` | long | DNS response error classes |
 | `th_dns_other_errors` / `th_dns_malformed` | long | Other RCODEs / unparsable packets |
 
+DNS counters cover plaintext UDP DNS on remote port 53 only. TCP DNS, DoH, and DoT are not visible.
+
 `flow_open` is the only event that carries `th_uid` and the destination tuple. Join it to `flow_close` on `th_session_id + th_flow_id` to attribute the close counters. DNS names, country/org labels and app labels are local-only and are not in syslog.
 
 ## Splunk

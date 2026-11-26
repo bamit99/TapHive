@@ -9,9 +9,9 @@ class DnsDiagnosticsTest {
     @Test
     fun countsQueryAndNxdomainResponse() {
         val query = query(id = 0x1234)
-        diagnostics.observe(false, "1.1.1.1", query, query.size)
+        diagnostics.observe(false, "1.1.1.1", 53, query, query.size)
         val response = response(id = 0x1234, rcode = 3)
-        diagnostics.observe(true, "1.1.1.1", response, response.size)
+        diagnostics.observe(true, "1.1.1.1", 53, response, response.size)
 
         val snapshot = diagnostics.snapshot()
         assertEquals(1L, snapshot.queries)
@@ -23,14 +23,25 @@ class DnsDiagnosticsTest {
     @Test
     fun expiresUnansweredQuery() {
         val query = query(id = 7)
-        diagnostics.observe(false, "1.1.1.1", query, query.size)
+        diagnostics.observe(false, "1.1.1.1", 53, query, query.size)
         diagnostics.expire(System.currentTimeMillis() + 6_000L)
         assertEquals(1L, diagnostics.snapshot().timeouts)
     }
 
     @Test
+    fun ignoresUnrelatedUdpPort() {
+        val query = query(id = 9)
+        diagnostics.observe(false, "1.1.1.1", 5353, query, query.size)
+        val snapshot = diagnostics.snapshot()
+        assertEquals(0L, snapshot.queries)
+        assertEquals(0L, snapshot.responses)
+        assertEquals(0L, snapshot.timeouts)
+        assertEquals(0L, snapshot.malformed)
+    }
+
+    @Test
     fun countsMalformedPacket() {
-        diagnostics.observe(false, "1.1.1.1", byteArrayOf(1, 2, 3), 3)
+        diagnostics.observe(false, "1.1.1.1", 53, byteArrayOf(1, 2, 3), 3)
         assertEquals(1L, diagnostics.snapshot().malformed)
     }
 

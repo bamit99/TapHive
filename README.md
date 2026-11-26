@@ -2,7 +2,7 @@
 
 TapHive is a clean-room Android app that captures **network flow metadata** on a local VPN interface and forwards it as structured **RFC 3164 or RFC 5424 JSON syslog events**. It also keeps a configurable local history with per-app and destination enrichment.
 
-> **v1.2.0 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.2.0 adds DNS diagnostics, per-IP drill-down and attribution. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
+> **v1.2.0 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.2.0 adds DNS diagnostics, per-IP drill-down and attribution. v1.2.0 device/instrumentation validation is pending while the test phone is offline. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
 
 **Prebuilt APK:** [`TapHive-1.2.0.apk`](https://github.com/bamit99/TapHive/releases/download/v1.2.0/TapHive-1.2.0.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
 
@@ -303,7 +303,7 @@ Verified on a CPH2585 phone and SM-P615 tablet running Android 16 (API 36):
 - Android 16 back showed the exit dialog; TRAFFIC back routing and navigation were checked.
 - SQLite migrated an existing v1 database to v2 with history preserved.
 - Force-stop and relaunch resumed capture when it was left running.
-- 14 JVM tests and 2 instrumentation tests passed; release APK verified signed and non-debuggable.
+- 18 JVM tests pass. Two instrumentation tests passed on Android 16 before the v1.2 changes; the v1.2 instrumentation suite has not been run because the test phone is offline. The release APK is verified signed and non-debuggable.
 
 ## Privacy and permissions
 
@@ -336,6 +336,8 @@ If enrichment is disabled, TapHive makes no request to ipwho.is. DNS names, when
 ## DNS diagnostics
 
 TapHive tracks DNS queries/responses, timeouts, NXDOMAIN, SERVFAIL, other RCODEs, and malformed responses. The aggregate counters are shown in **ABOUT → DNS DIAGNOSTICS** and included in `capture_start`/`capture_stop` syslog events as `th_dns_*` fields. Query names are not stored or emitted.
+
+This diagnostic path covers **plaintext UDP DNS with remote port 53 only**. DNS over TCP, DoH, and DoT are not visible and are not counted.
 
 ## Scope and roadmap
 

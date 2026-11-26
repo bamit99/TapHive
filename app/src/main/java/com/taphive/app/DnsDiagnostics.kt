@@ -4,8 +4,9 @@ import java.util.LinkedHashMap
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Aggregate DNS health counters. Queries are tracked by server + transaction id
- * only for timeout accounting; qnames are never stored or emitted.
+ * Aggregate DNS health counters for plaintext UDP DNS on remote port 53.
+ * Queries are tracked by server + transaction id only for timeout accounting;
+ * qnames are never stored or emitted. TCP DNS and DoH/DoT are not visible here.
  */
 class DnsDiagnostics(private val parser: DnsNameParser) {
     data class Snapshot(
@@ -44,7 +45,15 @@ class DnsDiagnostics(private val parser: DnsNameParser) {
         lastExpireMs = 0L
     }
 
-    fun observe(fromRemote: Boolean, serverIp: String, payload: ByteArray, length: Int) {
+    fun observe(
+        fromRemote: Boolean,
+        serverIp: String,
+        serverPort: Int,
+        payload: ByteArray,
+        length: Int
+    ) {
+        // Diagnostics are intentionally limited to plaintext DNS over UDP.
+        if (serverPort != DNS_PORT) return
         if (length < 12) {
             malformed.incrementAndGet()
             return
@@ -118,5 +127,6 @@ class DnsDiagnostics(private val parser: DnsNameParser) {
     private companion object {
         const val MAX_PENDING = 512
         const val DNS_TIMEOUT_MS = 5_000L
+        const val DNS_PORT = 53
     }
 }
