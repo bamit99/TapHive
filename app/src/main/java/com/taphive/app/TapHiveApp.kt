@@ -27,10 +27,8 @@ class TapHiveApp : Application() {
         geoResolver = IpGeoResolver(this, database)
         appNameResolver = AppNameResolver(this)
 
-        // Resume only when capture was explicitly left running. Boot is handled
-        // separately by BootReceiver, which also requires the user's opt-in.
-        if (prefs.captureWanted && !CaptureService.isRunning) {
-            CaptureService.start(this)
-        }
+        // Capture resume is driven by MainActivity (explicit foreground entry) or
+        // by the service's null-intent restart. Do not start from Application.onCreate:
+        // doing so bypasses the startAtBoot opt-in on a boot-triggered process.
     }
 }

@@ -7,8 +7,6 @@ import android.system.OsConstants
 import android.system.StructPollfd
 import java.io.FileInputStream
 import java.io.IOException
-import java.net.InetAddress
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -48,6 +46,9 @@ class PacketReader(
 
         /** Incremental byte delta for local history, including still-open flows. */
         fun onFlowBytes(flowId: Long, timestampMs: Long, bytesDelta: Long)
+
+        /** Called when continuing would leave the VPN up without a working reader. */
+        fun onCaptureError(message: String) {}
     }
 
     private class Flow(
@@ -58,11 +59,14 @@ class PacketReader(
         val protocol: Int,
         val openedAt: Long
     ) {
-        var bytesSent: Long = 0
-        var bytesReceived: Long = 0
-        var packetsSent: Long = 0
-        var packetsReceived: Long = 0
+        val bytesSent = AtomicLong(0)
+        val bytesReceived = AtomicLong(0)
+        val packetsSent = AtomicLong(0)
+        val packetsReceived = AtomicLong(0)
+
+        @Volatile
         var lastSeen: Long = openedAt
+
         var sampledBytes: Long = 0
     }
 
@@ -76,12 +80,19 @@ class PacketReader(
     private var input: FileInputStream? = null
     private var thread: Thread? = null
     private var lastSampleMs = 0L
+    private var lastExpireMs = 0L
     private val running = java.util.concurrent.atomic.AtomicBoolean(false)
 
     fun start() {
         if (!running.compareAndSet(false, true)) return
-        input = FileInputStream(pfd.fileDescriptor)
-        val reader = input ?: return
+        val reader = try {
+            FileInputStream(pfd.fileDescriptor)
+        } catch (e: IOException) {
+            running.set(false)
+            safeEmit { sink.onCaptureError("capture input unavailable: ${e.javaClass.simpleName}") }
+            return
+        }
+        input = reader
         thread = Thread({ loop(reader) }, "taphive-packets").also { it.start() }
     }
 
@@ -128,16 +139,28 @@ class PacketReader(
                 capturedPackets.incrementAndGet()
                 safeEmit { sink.onPacketCaptured(capturedPackets.get()) }
                 val now = System.currentTimeMillis()
-                val packet = parse(buffer, count)
+                val packet = PacketParser.parse(buffer, count)
                 if (packet != null) {
                     handle(packet, count.toLong(), now)
-                    forwarder?.forward(packet, buffer, count)
+                    try {
+                        forwarder?.forward(packet, buffer, count)
+                    } catch (e: Exception) {
+                        // A broken forwarding session must be visible, not turn
+                        // into a black hole while the VPN notification says live.
+                        safeEmit {
+                            sink.onCaptureError("forwarding failed: ${e.javaClass.simpleName}")
+                        }
+                        break
+                    }
                 }
                 if (now - lastSampleMs >= SAMPLE_INTERVAL_MS) {
                     sampleFlows(now)
                     lastSampleMs = now
                 }
-                expire(now, false)
+                if (now - lastExpireMs >= EXPIRE_INTERVAL_MS) {
+                    expire(now, false)
+                    lastExpireMs = now
+                }
             }
         } finally {
             expire(System.currentTimeMillis(), true)
@@ -146,23 +169,23 @@ class PacketReader(
     }
 
     private fun handle(packet: IpPacket, length: Long, now: Long) {
-        val key = flowKey(packet.src, packet.dst, packet.protocol)
+        val key = PacketParser.flowKey(packet.src, packet.dst, packet.protocol)
         val flow = flows[key] ?: createFlow(key, packet, now).also { flows[key] = it }
         if (flow.local.address == packet.src.address && flow.local.port == packet.src.port) {
-            flow.bytesSent += length
-            flow.packetsSent++
+            flow.bytesSent.addAndGet(length)
+            flow.packetsSent.incrementAndGet()
         } else {
-            flow.bytesReceived += length
-            flow.packetsReceived++
+            flow.bytesReceived.addAndGet(length)
+            flow.packetsReceived.incrementAndGet()
         }
         flow.lastSeen = now
     }
 
     /** Accounts for payload delivered by the forwarder from the remote side. */
     fun recordInbound(packet: IpPacket, length: Int) {
-        val flow = flows[flowKey(packet.src, packet.dst, packet.protocol)] ?: return
-        flow.bytesReceived += length
-        flow.packetsReceived++
+        val flow = flows[PacketParser.flowKey(packet.src, packet.dst, packet.protocol)] ?: return
+        flow.bytesReceived.addAndGet(length.toLong())
+        flow.packetsReceived.incrementAndGet()
     }
 
     private fun createFlow(key: String, packet: IpPacket, now: Long): Flow {
@@ -187,7 +210,7 @@ class PacketReader(
     /** Feeds local history with deltas from flows that are still open. */
     private fun sampleFlows(now: Long) {
         for (flow in flows.values) {
-            val total = flow.bytesSent + flow.bytesReceived
+            val total = flow.bytesSent.get() + flow.bytesReceived.get()
             val delta = total - flow.sampledBytes
             if (delta > 0) {
                 flow.sampledBytes = total
@@ -201,7 +224,7 @@ class PacketReader(
         while (iterator.hasNext()) {
             val flow = iterator.next()
             if (!force && now - flow.lastSeen < IDLE_TIMEOUT_MS) continue
-            val total = flow.bytesSent + flow.bytesReceived
+            val total = flow.bytesSent.get() + flow.bytesReceived.get()
             val pending = total - flow.sampledBytes
             if (pending > 0) {
                 flow.sampledBytes = total
@@ -211,10 +234,10 @@ class PacketReader(
                 sink.onFlowClose(
                     flow.id,
                     now,
-                    flow.bytesSent,
-                    flow.bytesReceived,
-                    flow.packetsSent,
-                    flow.packetsReceived,
+                    flow.bytesSent.get(),
+                    flow.bytesReceived.get(),
+                    flow.packetsSent.get(),
+                    flow.packetsReceived.get(),
                     if (force) "STOPPED" else "CLOSED"
                 )
             }
@@ -230,87 +253,11 @@ class PacketReader(
         }
     }
 
-    private fun parse(bytes: ByteArray, length: Int): IpPacket? {
-        if (length < 1) return null
-        return when (bytes[0].toInt() ushr 4) {
-            4 -> parseIpv4(bytes, length)
-            6 -> parseIpv6(bytes, length)
-            else -> null
-        }
-    }
-
-    private fun parseIpv4(bytes: ByteArray, length: Int): IpPacket? {
-        if (length < 20) return null
-        val headerLength = (bytes[0].toInt() and 0x0f) * 4
-        if (headerLength < 20 || headerLength > length) return null
-        val protocol = u8(bytes, 9)
-        val (sport, dport) = transportPorts(bytes, length, headerLength, protocol)
-        return IpPacket(
-            protocol,
-            endpoint(4, bytes.copyOfRange(12, 16), sport),
-            endpoint(4, bytes.copyOfRange(16, 20), dport)
-        )
-    }
-
-    private fun parseIpv6(bytes: ByteArray, length: Int): IpPacket? {
-        if (length < 40) return null
-        var offset = 40
-        var next = u8(bytes, 6)
-        while (next == 0 || next == 43 || next == 44 || next == 60) {
-            if (length < offset + 8) return null
-            val following = u8(bytes, offset)
-            val headerLength = (u8(bytes, offset + 1) + 2) * 8
-            if (headerLength < 8 || offset + headerLength > length) return null
-            offset += headerLength
-            next = following
-        }
-        val (sport, dport) = transportPorts(bytes, length, offset, next)
-        return IpPacket(
-            next,
-            endpoint(6, bytes.copyOfRange(8, 24), sport),
-            endpoint(6, bytes.copyOfRange(24, 40), dport)
-        )
-    }
-
-    private fun transportPorts(
-        bytes: ByteArray,
-        length: Int,
-        offset: Int,
-        protocol: Int
-    ): Pair<Int, Int> {
-        if (protocol != 6 && protocol != 17 && protocol != 132) return 0 to 0
-        if (length < offset + 4) return 0 to 0
-        return u16(bytes, offset) to u16(bytes, offset + 2)
-    }
-
-    private fun endpoint(family: Int, address: ByteArray, port: Int): Endpoint = Endpoint(
-        family = family,
-        address = String(address, Charsets.ISO_8859_1),
-        ip = InetAddress.getByAddress(address).hostAddress ?: "unknown",
-        port = port
-    )
-
-    private fun flowKey(src: Endpoint, dst: Endpoint, protocol: Int): String {
-        val endpoints = listOf(src, dst).sortedWith(
-            compareBy<Endpoint> { it.family }.thenBy { it.address }.thenBy { it.port }
-        )
-        val a = endpoints[0]
-        val b = endpoints[1]
-        return String.format(
-            Locale.ROOT,
-            "%d|%d|%s:%d|%d|%s:%d",
-            protocol, a.family, a.address, a.port, b.family, b.address, b.port
-        )
-    }
-
-    private fun u8(bytes: ByteArray, index: Int): Int = bytes[index].toInt() and 0xff
-
-    private fun u16(bytes: ByteArray, index: Int): Int = (u8(bytes, index) shl 8) or u8(bytes, index + 1)
-
     private companion object {
         const val BUFFER_SIZE = 65535
         const val IDLE_TIMEOUT_MS = 30_000L
         const val SAMPLE_INTERVAL_MS = 10_000L
+        const val EXPIRE_INTERVAL_MS = 1_000L
         const val JOIN_TIMEOUT_MS = 2_000L
         const val POLL_TIMEOUT_MS = 250
     }

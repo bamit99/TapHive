@@ -72,6 +72,7 @@ class SyslogSender(private val prefs: Prefs) {
     @Volatile
     var network: Network? = null
         set(value) {
+            if (field == value) return
             field = value
             resetTarget()
         }

@@ -34,6 +34,9 @@ class DnsNameParser {
         repeat(answerCount) {
             if (cursor + 10 > length) return@repeat
             val parsed = readName(payload, cursor, length) ?: return@repeat
+            // readName may end exactly at the payload boundary. Validate the
+            // fixed answer header against that returned offset, not `cursor`.
+            if (parsed.second + 10 > length) return@repeat
             val type = u16(payload, parsed.second)
             val rdLength = u16(payload, parsed.second + 8)
             val rdata = parsed.second + 10

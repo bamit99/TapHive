@@ -19,6 +19,8 @@ import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
 import android.widget.Button
 import android.widget.TextView
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 
 class MainActivity : Activity() {
     private lateinit var status: TextView
@@ -30,6 +32,7 @@ class MainActivity : Activity() {
     private lateinit var targetStateView: TextView
     private lateinit var captureToggle: Button
     private var exitDialog: AlertDialog? = null
+    private var backCallback: OnBackInvokedCallback? = null
     private val handler = Handler(Looper.getMainLooper())
     private val statusPoll = object : Runnable {
         override fun run() {
@@ -67,6 +70,14 @@ class MainActivity : Activity() {
         }
         findViewById<Button>(R.id.settings).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
+        }
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            backCallback = OnBackInvokedCallback { showExitDialog() }
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                backCallback!!
+            )
         }
 
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -125,8 +136,25 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
+    override fun onDestroy() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            backCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) }
+        }
+        backCallback = null
+        exitDialog?.dismiss()
+        exitDialog = null
+        super.onDestroy()
+    }
+
+    @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        if (exitDialog?.isShowing == true) return
+        // Keep this fallback for API 32 and for OEMs/ADB paths that still invoke
+        // the legacy method even with the API 33+ callback registered.
+        showExitDialog()
+    }
+
+    private fun showExitDialog() {
+        if (isFinishing || exitDialog?.isShowing == true) return
         val message = if (CaptureService.isRunning) {
             R.string.exit_message_running
         } else {

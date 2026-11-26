@@ -7,10 +7,13 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
+import android.net.ConnectivityManager.NetworkCallback
 import android.net.Network
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import java.time.Instant
 import java.util.UUID
@@ -20,6 +23,8 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
     private val dnsParser = DnsNameParser()
     private var pfd: ParcelFileDescriptor? = null
     private var reader: PacketReader? = null
+    private var forwarder: Ipv4TunnelForwarder? = null
+    private var networkCallback: NetworkCallback? = null
     private var sessionId = ""
 
     private val app: TapHiveApp
@@ -79,6 +84,9 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
             .addRoute("0.0.0.0", 1)
             .addRoute("128.0.0.0", 1)
             .setMetered(false)
+            // TapHive's own syslog/enrichment traffic must never re-enter the
+            // tunnel it is capturing.
+            .addDisallowedApplication(packageName)
 
         val fd = try {
             builder.establish()
@@ -96,6 +104,7 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         }
 
         pfd = fd
+        setUnderlyingNetworks(null)
         sessionId = UUID.randomUUID().toString()
         app.tracker.reset()
         CaptureService.packetsCaptured = 0L
@@ -103,7 +112,7 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         isRunning = true
         starting = false
         app.sender.enqueue(captureEvent("capture_start", includeTotals = true))
-        val forwarder = Ipv4TunnelForwarder(
+        val tunnelForwarder = Ipv4TunnelForwarder(
             vpn = this,
             network = app.sender.network,
             tun = TunWriter(fd.fileDescriptor),
@@ -116,7 +125,46 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
                 }
             }
         )
-        reader = PacketReader(fd, this, forwarder).also { it.start() }
+        forwarder = tunnelForwarder
+        registerNetworkCallback()
+        reader = PacketReader(fd, this, tunnelForwarder).also { it.start() }
+    }
+
+    private fun registerNetworkCallback() {
+        if (networkCallback != null) return
+        val manager = getSystemService(ConnectivityManager::class.java) ?: return
+        val callback = object : NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                // The default callback can report TapHive's own VPN. Resolve the
+                // real non-VPN network instead of binding helper sockets to it.
+                Networks.underlying(this@CaptureService)?.let(::applyUnderlyingNetwork)
+            }
+
+            override fun onLost(network: Network) {
+                applyUnderlyingNetwork(Networks.underlying(this@CaptureService))
+            }
+        }
+        networkCallback = callback
+        try {
+            manager.registerDefaultNetworkCallback(callback)
+        } catch (_: Exception) {
+            networkCallback = null
+        }
+    }
+
+    private fun applyUnderlyingNetwork(network: Network?) {
+        app.sender.network = network
+        app.geoResolver.network = network
+        forwarder?.updateNetwork(network)
+    }
+
+    private fun unregisterNetworkCallback() {
+        val callback = networkCallback ?: return
+        networkCallback = null
+        try {
+            getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(callback)
+        } catch (_: Exception) {
+        }
     }
 
     override fun onPacketCaptured(total: Long) {
@@ -193,6 +241,16 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         )
     }
 
+    override fun onCaptureError(message: String) {
+        Handler(Looper.getMainLooper()).post {
+            android.util.Log.e(TAG, "capture error: $message")
+            app.prefs.setCaptureWanted(false)
+            releaseCapture(emitLifecycle = false)
+            stopSelf()
+            notifyCaptureError()
+        }
+    }
+
     private fun underlyingNetwork(): Network? = Networks.underlying(this)
 
     private fun captureEvent(name: String, includeTotals: Boolean = false) = SyslogEvent(
@@ -244,6 +302,27 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         manager.notify(ALERT_NOTIFICATION_ID, notification)
     }
 
+    private fun notifyCaptureError() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) return
+        val intent = Intent(this, MainActivity::class.java)
+        val pending = PendingIntent.getActivity(
+            this, 3, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val notification = Notification.Builder(this, ALERT_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle(getString(R.string.capture_failed_title))
+            .setContentText(getString(R.string.capture_failed_text))
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .build()
+        getSystemService(NotificationManager::class.java)
+            .notify(ALERT_NOTIFICATION_ID, notification)
+    }
+
     private fun showForeground() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
@@ -281,6 +360,8 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
             reader?.stop()
             CaptureService.packetsCaptured = reader?.packetsCaptured ?: CaptureService.packetsCaptured
             reader = null
+            unregisterNetworkCallback()
+            forwarder = null
             if (emitLifecycle && isRunning) {
                 app.sender.enqueue(captureEvent("capture_stop", includeTotals = true))
             }

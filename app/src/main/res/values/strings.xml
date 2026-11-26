@@ -35,6 +35,8 @@
     <string name="alert_channel_name">TapHive capture alerts</string>
     <string name="capture_start_failed_title">Capture did not start</string>
     <string name="capture_start_failed_text">Open TapHive to approve the VPN connection again</string>
+    <string name="capture_failed_title">Capture stopped</string>
+    <string name="capture_failed_text">Forwarding failed. Open TapHive and restart capture.</string>
     <string name="settings_title">SYSLOG TARGET</string>
     <string name="back">← BACK</string>
     <string name="info">INFO</string>

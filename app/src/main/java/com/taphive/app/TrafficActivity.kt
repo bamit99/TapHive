@@ -3,6 +3,7 @@ package com.taphive.app
 import android.app.Activity
 import android.content.Intent
 import android.graphics.drawable.ColorDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -10,6 +11,8 @@ import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import java.util.Locale
 
 /**
@@ -30,6 +33,7 @@ class TrafficActivity : Activity() {
     private lateinit var historyInfo: TextView
     private var showApps = false
     private var lastSignature = ""
+    private var backCallback: OnBackInvokedCallback? = null
     private val handler = Handler(Looper.getMainLooper())
     private val poll = object : Runnable {
         override fun run() {
@@ -58,6 +62,14 @@ class TrafficActivity : Activity() {
         findViewById<Button>(R.id.info).setOnClickListener {
             startActivity(Intent(this, AboutActivity::class.java))
         }
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            backCallback = OnBackInvokedCallback { returnToMain() }
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                backCallback!!
+            )
+        }
     }
 
     private fun selectTab(apps: Boolean) {
@@ -83,8 +95,18 @@ class TrafficActivity : Activity() {
         super.onPause()
     }
 
+    @Suppress("DEPRECATION")
     override fun onBackPressed() {
+        // API 32 fallback and tolerance for OEM/ADB paths that still call it.
         returnToMain()
+    }
+
+    override fun onDestroy() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            backCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) }
+        }
+        backCallback = null
+        super.onDestroy()
     }
 
     /** Always land on the capture screen, even when launched directly. */

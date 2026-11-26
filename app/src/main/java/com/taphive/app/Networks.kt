@@ -9,10 +9,9 @@ import android.net.NetworkCapabilities
 internal object Networks {
     fun underlying(context: Context): Network? {
         val manager = context.getSystemService(ConnectivityManager::class.java) ?: return null
-        return manager.allNetworks.firstOrNull { network ->
-            val caps = manager.getNetworkCapabilities(network)
-            caps != null &&
-                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+        fun usable(network: Network?): Boolean {
+            val caps = network?.let(manager::getNetworkCapabilities) ?: return false
+            return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
                 !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
                 (
                     caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
@@ -20,5 +19,7 @@ internal object Networks {
                         caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
                     )
         }
+        manager.activeNetwork?.takeIf(::usable)?.let { return it }
+        return manager.allNetworks.firstOrNull(::usable)
     }
 }

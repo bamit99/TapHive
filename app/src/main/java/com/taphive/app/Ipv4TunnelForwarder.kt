@@ -17,6 +17,7 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.max
 import kotlin.math.min
 
 interface TunnelForwarder {
@@ -33,12 +34,24 @@ interface TunnelForwarder {
  */
 class Ipv4TunnelForwarder(
     private val vpn: VpnService,
-    private val network: Network?,
+    network: Network?,
     private val tun: TunWriter,
     private val onInbound: (IpPacket, Int) -> Unit,
     private val localIp: String = "10.0.0.2",
     private val onUdpPayload: (Int, ByteArray, Int) -> Unit = { _, _, _ -> }
 ) : TunnelForwarder {
+
+    @Volatile
+    private var network: Network? = network
+
+    /** Called when the default network changes; new sessions use the new network. */
+    fun updateNetwork(value: Network?) {
+        if (network == value) return
+        network = value
+        // Existing sessions are bound to the old network. Let the apps reconnect
+        // instead of waiting for a long socket timeout.
+        sessions.values.toList().forEach { it.closeSession() }
+    }
 
     private data class SessionKey(
         val protocol: Int,
@@ -76,43 +89,54 @@ class Ipv4TunnelForwarder(
 
         fun send(payload: ByteArray) {
             if (closed) return
-            socket.send(DatagramPacket(payload, payload.size, remote))
+            try {
+                socket.send(DatagramPacket(payload, payload.size, remote))
+            } catch (_: IOException) {
+                closeSession()
+            }
         }
 
         private fun receiveLoop() {
             val buffer = ByteArray(MAX_UDP_PAYLOAD)
-            while (!closed) {
-                try {
-                    val packet = DatagramPacket(buffer, buffer.size)
-                    socket.receive(packet)
-                    val payload = packet.data.copyOfRange(packet.offset, packet.offset + packet.length)
-                    onUdpPayload(key.remotePort, payload, payload.size)
-                    val reply = IpPacket(
-                        protocol = 17,
-                        src = endpointOf(this@UdpSession.packet.dst.ip, this@UdpSession.packet.dst.port),
-                        dst = endpointOf(this@UdpSession.packet.src.ip, this@UdpSession.packet.src.port)
-                    )
-                    tun.write(
-                        buildUdp(
-                            srcIp = reply.src.ip,
-                            dstIp = reply.dst.ip,
-                            srcPort = reply.src.port,
-                            dstPort = reply.dst.port,
-                            payload = payload
+            try {
+                while (!closed) {
+                    try {
+                        val packet = DatagramPacket(buffer, buffer.size)
+                        socket.receive(packet)
+                        val payload = packet.data.copyOfRange(packet.offset, packet.offset + packet.length)
+                        try {
+                            onUdpPayload(key.remotePort, payload, payload.size)
+                        } catch (_: Exception) {
+                            // A malformed DNS response must not kill forwarding.
+                        }
+                        val reply = IpPacket(
+                            protocol = 17,
+                            src = endpointOf(this@UdpSession.packet.dst.ip, this@UdpSession.packet.dst.port),
+                            dst = endpointOf(this@UdpSession.packet.src.ip, this@UdpSession.packet.src.port)
                         )
-                    )
-                    onInbound(this@UdpSession.packet, payload.size)
-                    lastSeen = System.currentTimeMillis()
-                } catch (_: SocketTimeoutException) {
-                    if (System.currentTimeMillis() - lastSeen > UDP_TIMEOUT_MS) {
-                        closeSession()
+                        tun.write(
+                            buildUdp(
+                                srcIp = reply.src.ip,
+                                dstIp = reply.dst.ip,
+                                srcPort = reply.src.port,
+                                dstPort = reply.dst.port,
+                                payload = payload
+                            )
+                        )
+                        onInbound(this@UdpSession.packet, payload.size)
+                        lastSeen = System.currentTimeMillis()
+                    } catch (_: SocketTimeoutException) {
+                        if (System.currentTimeMillis() - lastSeen > UDP_TIMEOUT_MS) {
+                            break
+                        }
+                    } catch (_: SocketException) {
+                        break
+                    } catch (_: IOException) {
                         break
                     }
-                } catch (_: SocketException) {
-                    break
-                } catch (_: IOException) {
-                    break
                 }
+            } finally {
+                closeSession()
             }
         }
 
@@ -135,7 +159,7 @@ class Ipv4TunnelForwarder(
         val clientIsn: Long
     ) : Session(key, packet) {
         val serverIsn: Long = u32(randomBytes(), 0)
-        private val outgoing = LinkedBlockingQueue<ByteArray>()
+        private val outgoing = LinkedBlockingQueue<ByteArray>(MAX_OUTGOING_CHUNKS)
         private var socket: Socket? = null
         private var input: InputStream? = null
         private var output: OutputStream? = null
@@ -193,9 +217,10 @@ class Ipv4TunnelForwarder(
         }
 
         fun sendRst() {
+            val seq = if (state == TcpState.SYN_RECEIVED) 0L else wrap(serverIsn + serverBytesSent)
             sendSegment(
-                seq = wrap(serverIsn + serverBytesSent),
-                ack = 0L,
+                seq = seq,
+                ack = wrap(clientIsn + clientExpectedSeq),
                 flags = FLAG_RST or FLAG_ACK
             )
         }
@@ -207,7 +232,11 @@ class Ipv4TunnelForwarder(
                 }
                 relativeSeq < clientExpectedSeq -> sendAck()
                 else -> {
-                    outgoing.offer(payload.copyOf())
+                    if (!outgoing.offer(payload.copyOf())) {
+                        sendRst()
+                        closeSession()
+                        return
+                    }
                     clientExpectedSeq += payload.size
                     sendAck()
                 }
@@ -271,6 +300,12 @@ class Ipv4TunnelForwarder(
                     val chunk = outgoing.poll(500, TimeUnit.MILLISECONDS)
                     if (chunk == null) {
                         checkSynTimeout()
+                        if (state != TcpState.SYN_RECEIVED &&
+                            System.currentTimeMillis() - lastSeen > TCP_IDLE_TIMEOUT_MS
+                        ) {
+                            closeSession()
+                            break
+                        }
                         continue
                     }
                     if (chunk.isEmpty()) {
@@ -290,41 +325,45 @@ class Ipv4TunnelForwarder(
         private fun readFromNetwork() {
             val stream = input ?: return
             val buffer = ByteArray(MAX_TCP_PAYLOAD)
-            while (!closed) {
-                if (serverBytesSent - clientAck >= clientWindow) {
-                    try {
-                        Thread.sleep(20)
-                    } catch (_: InterruptedException) {
+            try {
+                while (!closed) {
+                    if (serverBytesSent - clientAck >= clientWindow) {
+                        try {
+                            Thread.sleep(20)
+                        } catch (_: InterruptedException) {
+                            break
+                        }
+                        continue
+                    }
+                    val count = try {
+                        stream.read(buffer)
+                    } catch (_: SocketTimeoutException) {
+                        if (System.currentTimeMillis() - lastSeen > TCP_IDLE_TIMEOUT_MS) break
+                        continue
+                    } catch (_: SocketException) {
+                        break
+                    } catch (_: IOException) {
                         break
                     }
-                    continue
+                    if (count < 0) {
+                        sendFin()
+                        break
+                    }
+                    val payload = buffer.copyOf(count)
+                    val start = serverBytesSent
+                    serverBytesSent += count
+                    sendSegment(
+                        seq = wrap(serverIsn + start),
+                        ack = wrap(clientIsn + clientExpectedSeq),
+                        flags = FLAG_PSH or FLAG_ACK,
+                        payload = payload
+                    )
+                    onInbound(packet, count)
+                    lastSeen = System.currentTimeMillis()
                 }
-                val count = try {
-                    stream.read(buffer)
-                } catch (_: SocketTimeoutException) {
-                    continue
-                } catch (_: SocketException) {
-                    break
-                } catch (_: IOException) {
-                    break
-                }
-                if (count < 0) {
-                    sendFin()
-                    break
-                }
-                val payload = buffer.copyOf(count)
-                val start = serverBytesSent
-                serverBytesSent += count
-                sendSegment(
-                    seq = wrap(serverIsn + start),
-                    ack = wrap(clientIsn + clientExpectedSeq),
-                    flags = FLAG_PSH or FLAG_ACK,
-                    payload = payload
-                )
-                onInbound(packet, count)
-                lastSeen = System.currentTimeMillis()
+            } finally {
+                closeSession()
             }
-            closeSession()
         }
 
         private fun checkSynTimeout() {
@@ -362,6 +401,15 @@ class Ipv4TunnelForwarder(
         val headerLength = (u8(raw, 0) and 0x0f) * 4
         if (headerLength < 20 || totalLength <= headerLength) return
 
+        // Fragmented IPv4 is not reassembled. Dropping it is safer than
+        // forwarding a partial datagram or reading ports from a non-first fragment.
+        if (u16(raw, 6) and 0x3fff != 0) return
+        if (packet.protocol == 17 && totalLength < headerLength + 8) return
+        if (packet.protocol == 6 && totalLength < headerLength + 20) return
+
+        val tcpOffset = headerLength
+        val flags = if (packet.protocol == 6) u8(raw, tcpOffset + 13) else 0
+
         val key = SessionKey(
             protocol = packet.protocol,
             localIp = packet.src.ip,
@@ -371,6 +419,12 @@ class Ipv4TunnelForwarder(
         )
         var session = sessions[key]
         if (session == null) {
+            // Only a fresh SYN may create a TCP session. A late ACK after a
+            // close must not open a phantom outbound connection.
+            if (packet.protocol == 6 && (flags and FLAG_SYN == 0 || flags and FLAG_ACK != 0)) {
+                sendUnknownTcpReset(packet, raw, tcpOffset, totalLength)
+                return
+            }
             synchronized(sessions) {
                 session = sessions[key] ?: createSession(key, packet, raw, headerLength, totalLength)
                     .also { created -> if (created != null) sessions[key] = created }
@@ -416,8 +470,49 @@ class Ipv4TunnelForwarder(
         else -> null
     }
 
+    /** Reject an unknown/closed TCP 4-tuple with a correctly addressed RST. */
+    private fun sendUnknownTcpReset(packet: IpPacket, raw: ByteArray, tcpOffset: Int, totalLength: Int) {
+        if (tunClosed.get()) return
+        val dataOffset = (u8(raw, tcpOffset + 12) ushr 4) * 4
+        if (dataOffset < 20 || tcpOffset + dataOffset > totalLength) return
+        val flags = u8(raw, tcpOffset + 13)
+        val seq = u32(raw, tcpOffset + 4)
+        val ack = u32(raw, tcpOffset + 8)
+        val payloadLength = totalLength - (tcpOffset + dataOffset)
+        val hasAck = flags and FLAG_ACK != 0
+        val rst = if (hasAck) {
+            buildTcp(
+                srcIp = packet.dst.ip,
+                dstIp = packet.src.ip,
+                srcPort = packet.dst.port,
+                dstPort = packet.src.port,
+                seq = ack,
+                ack = 0L,
+                flags = FLAG_RST,
+                window = 0,
+                options = EMPTY_BYTES,
+                payload = EMPTY_BYTES
+            )
+        } else {
+            buildTcp(
+                srcIp = packet.dst.ip,
+                dstIp = packet.src.ip,
+                srcPort = packet.dst.port,
+                dstPort = packet.src.port,
+                seq = 0L,
+                ack = wrap(seq + payloadLength + if (flags and FLAG_SYN != 0) 1 else 0),
+                flags = FLAG_RST or FLAG_ACK,
+                window = 0,
+                options = EMPTY_BYTES,
+                payload = EMPTY_BYTES
+            )
+        }
+        tun.write(rst)
+    }
+
     private fun handleTcp(session: TcpSession, raw: ByteArray, ipHeaderLength: Int, totalLength: Int) {
         val tcpOffset = ipHeaderLength
+        if (tcpOffset + 20 > totalLength) return
         val dataOffset = (u8(raw, tcpOffset + 12) ushr 4) * 4
         if (dataOffset < 20 || tcpOffset + dataOffset > totalLength) return
         val flags = u8(raw, tcpOffset + 13)
@@ -429,7 +524,7 @@ class Ipv4TunnelForwarder(
             return
         }
         if (flags and FLAG_ACK != 0) {
-            session.clientAck = relative(ack, session.serverIsn)
+            session.clientAck = max(session.clientAck, relative(ack, session.serverIsn))
             // We do not negotiate window scaling in our SYN-ACK, so honor the raw window.
             val advertised = u16(raw, tcpOffset + 14).toLong()
             session.clientWindow = min(MAX_WINDOW, advertised)
@@ -587,8 +682,10 @@ class Ipv4TunnelForwarder(
         const val SOCKET_TIMEOUT_MS = 1000
         const val SYN_TIMEOUT_MS = 30_000L
         const val UDP_TIMEOUT_MS = 60_000L
+        const val TCP_IDLE_TIMEOUT_MS = 120_000L
         const val MAX_TCP_PAYLOAD = 1460
-        const val MAX_UDP_PAYLOAD = 1472
+        const val MAX_UDP_PAYLOAD = 65535
+        const val MAX_OUTGOING_CHUNKS = 256
         const val MAX_WINDOW = 1L shl 30
     }
 }
