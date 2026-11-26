@@ -26,6 +26,7 @@ class SettingsActivity : Activity() {
         val facility = findViewById<EditText>(R.id.syslog_facility)
         val appName = findViewById<EditText>(R.id.syslog_app_name)
         val startAtBoot = findViewById<CheckBox>(R.id.start_at_boot)
+        val enrichment = findViewById<CheckBox>(R.id.enrichment_enabled)
         val retention = findViewById<Spinner>(R.id.retention)
         val error = findViewById<TextView>(R.id.error)
 
@@ -37,7 +38,7 @@ class SettingsActivity : Activity() {
         transport.adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_item,
-            arrayOf("udp", "tcp")
+            arrayOf("udp", "tcp", "tls")
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
         val formatValues = arrayOf("rfc3164", "rfc5424")
@@ -58,11 +59,18 @@ class SettingsActivity : Activity() {
         enabled.isChecked = prefs.enabled
         host.setText(prefs.host)
         port.setText(prefs.port.toString())
-        transport.setSelection(if (prefs.transport == "tcp") 1 else 0)
+        transport.setSelection(
+            when (prefs.transport) {
+                "tcp" -> 1
+                "tls" -> 2
+                else -> 0
+            }
+        )
         format.setSelection(formatValues.indexOf(prefs.syslogFormat).coerceAtLeast(0))
         facility.setText(prefs.facility.toString())
         appName.setText(prefs.appName)
         startAtBoot.isChecked = prefs.startAtBoot
+        enrichment.isChecked = prefs.enrichmentEnabled
         retention.setSelection(
             retentionHours.indexOf(prefs.retentionHours).coerceAtLeast(0)
         )
@@ -87,6 +95,7 @@ class SettingsActivity : Activity() {
                 }
             }
             prefs.setStartAtBoot(startAtBoot.isChecked)
+            prefs.setEnrichmentEnabled(enrichment.isChecked)
             prefs.saveRetention(retentionHours[retention.selectedItemPosition])
             app.database.prune()
             prefs.save(

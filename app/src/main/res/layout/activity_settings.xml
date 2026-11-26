@@ -57,7 +57,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:buttonTint="@color/neon_cyan"
-                android:text="Enable syslog forwarding (cleartext)"
+                android:text="@string/syslog_enable_label"
                 android:textColor="@color/neon_text" />
 
             <TextView
@@ -123,6 +123,14 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="2dp"
+                android:text="@string/tls_hint"
+                android:textColor="@color/neon_muted"
+                android:textSize="11sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
                 android:text="SYSLOG FORMAT"
                 style="@style/NeonLabel" />
@@ -184,6 +192,37 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="34dp"
                 android:text="Resumes only if capture was left running"
+                android:textColor="@color/neon_muted"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/neon_card"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/privacy_title"
+                style="@style/NeonLabel" />
+
+            <CheckBox
+                android:id="@+id/enrichment_enabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:buttonTint="@color/neon_cyan"
+                android:text="@string/enrichment_label"
+                android:textColor="@color/neon_text" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="34dp"
+                android:text="@string/enrichment_hint"
                 android:textColor="@color/neon_muted"
                 android:textSize="11sp" />
         </LinearLayout>

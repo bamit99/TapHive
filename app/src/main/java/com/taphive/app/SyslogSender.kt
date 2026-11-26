@@ -12,6 +12,10 @@ import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.text.SimpleDateFormat
+import javax.net.ssl.SSLException
+import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.SSLSocketFactory
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ArrayBlockingQueue
@@ -81,6 +85,7 @@ class SyslogSender(private val prefs: Prefs) {
 
     private var udpSocket: DatagramSocket? = null
     private var tcpSocket: Socket? = null
+    private var tlsSocket: SSLSocket? = null
     private var retryDelayMs = 1000L
     private var nextRetryMs = 0L
     private var tokens = BUCKET_SIZE
@@ -193,14 +198,18 @@ class SyslogSender(private val prefs: Prefs) {
         }
         try {
             val bytes = message.toByteArray(Charsets.UTF_8)
-            if (prefs.transport == "tcp") sendTcp(bytes) else sendUdp(bytes)
+            when (prefs.transport) {
+                "tcp" -> sendTcp(bytes)
+                "tls" -> sendTls(bytes)
+                else -> sendUdp(bytes)
+            }
             forwarded.incrementAndGet()
             retryDelayMs = 1000L
             nextRetryMs = 0L
             lastSuccessfulSendMs = now
             // TCP connect is positive proof. For UDP, a recent ICMP error stays red:
             // a fresh socket can accept a datagram before the next rejection arrives.
-            if (prefs.transport == "tcp") {
+            if (prefs.transport != "udp") {
                 lastFailureMs = 0L
                 lastFailureError = null
                 lastError = null
@@ -254,6 +263,27 @@ class SyslogSender(private val prefs: Prefs) {
         out.flush()
     }
 
+    private fun sendTls(bytes: ByteArray) {
+        var socket = tlsSocket
+        if (socket == null || socket.isClosed || !socket.isConnected) {
+            val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
+            socket = factory.createSocket() as SSLSocket
+            network?.bindSocket(socket)
+            socket.connect(InetSocketAddress(prefs.host, prefs.port), CONNECT_TIMEOUT_MS)
+            socket.soTimeout = CONNECT_TIMEOUT_MS
+            val params = socket.sslParameters
+            // The platform default trust store plus RFC 6125 hostname checks.
+            params.endpointIdentificationAlgorithm = "HTTPS"
+            socket.sslParameters = params
+            socket.startHandshake()
+            tlsSocket = socket
+        }
+        val out = socket.getOutputStream()
+        out.write(bytes)
+        out.write('\n'.code)
+        out.flush()
+    }
+
     /** Replace raw errno text with something a user can act on. */
     private fun friendlyError(e: Exception): String {
         val message = e.message.orEmpty()
@@ -264,6 +294,8 @@ class SyslogSender(private val prefs: Prefs) {
                 "UDP PORT UNREACHABLE · CHECK SERVER / PORT"
             e is UnknownHostException -> "HOST NOT FOUND · CHECK SERVER"
             e is SocketTimeoutException -> "CONNECTION TIMED OUT · CHECK SERVER"
+            e is SSLHandshakeException -> "TLS HANDSHAKE FAILED · CHECK CERTIFICATE"
+            e is SSLException -> "TLS FAILED · CHECK CERTIFICATE"
             refused && prefs.transport == "udp" ->
                 "UDP PORT UNREACHABLE · CHECK SERVER / PORT"
             refused -> "CONNECTION REFUSED · CHECK SERVER / PORT"
@@ -280,8 +312,13 @@ class SyslogSender(private val prefs: Prefs) {
             tcpSocket?.close()
         } catch (_: Exception) {
         }
+        try {
+            tlsSocket?.close()
+        } catch (_: Exception) {
+        }
         udpSocket = null
         tcpSocket = null
+        tlsSocket = null
     }
 
     private companion object {

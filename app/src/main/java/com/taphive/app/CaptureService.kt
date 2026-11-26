@@ -118,7 +118,7 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
             tun = TunWriter(fd.fileDescriptor),
             onInbound = { packet, length -> reader?.recordInbound(packet, length) },
             onUdpPayload = { port, payload, length ->
-                if (port == 53) {
+                if (port == 53 && app.prefs.retentionHours > 0) {
                     dnsParser.parse(payload, length).forEach { (ip, name) ->
                         app.database.upsertDnsName(ip, name)
                     }
@@ -185,7 +185,9 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
 
         // The traffic view aggregates the same flow events the syslog path consumes.
         app.tracker.addFlow(flowId, uid, dstIp, dstPort, protocol)
-        app.geoResolver.lookup(dstIp)
+        if (app.prefs.enrichmentEnabled) {
+            app.geoResolver.lookup(dstIp)
+        }
 
         app.sender.enqueue(
             SyslogEvent(

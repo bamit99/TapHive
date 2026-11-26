@@ -1,39 +1,38 @@
 package com.taphive.app
 
-import android.content.Context
 import android.net.Network
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.net.InetSocketAddress
-import java.net.Socket
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
+import java.io.InputStream
+import java.net.InetAddress
+import java.net.URL
+import javax.net.ssl.HttpsURLConnection
+import java.util.Collections
+import java.util.LinkedHashMap
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Resolves destination IPs to a country and an organisation label via the
- * free ip-api.com tier. No API key, no new dependency.
+ * Optional destination-IP enrichment over HTTPS.
  *
- * A raw socket is used so the request can be bound to the underlying network
- * (the VPN tunnel must not swallow it) and so we can honour the tier's rate
- * limit headers. Results are persisted in [TrafficDatabase], so a lookup that
- * finishes after a flow closes still enriches history.
+ * Only called when the user enables external enrichment. The provider receives
+ * the destination IP only; UID, ports, DNS names and local history stay on-device.
  */
 class IpGeoResolver(
-    private val context: Context,
     private val database: TrafficDatabase
 ) {
     companion object {
-        const val API_BASE = "http://ip-api.com/json/"
-        const val TTL_MS = 6 * 60 * 60 * 1000L
-        private const val HOST = "ip-api.com"
-        private const val PORT = 80
-        private const val FIELDS = "status,message,country,org,isp,as"
+        private const val BASE_URL = "https://ipwho.is/"
         private const val TIMEOUT_MS = 5000
-        // Free tier allows 45 requests/minute for single lookups.
-        private const val MIN_INTERVAL_MS = 1400L
-        private const val RATE_LIMIT_MS = 60_000L
+        private const val MIN_INTERVAL_MS = 1500L
+        private const val TTL_MS = 6 * 60 * 60 * 1000L
+        private const val MAX_BODY_BYTES = 64 * 1024
+        private const val MAX_CACHE = 2048
         private const val LOCAL_LABEL = "LOCAL"
     }
 
@@ -43,27 +42,44 @@ class IpGeoResolver(
     @Volatile
     var network: Network? = null
 
-    /** In-memory mirror so the UI can show a country before the next DB read. */
-    val countries: ConcurrentHashMap<String, String> = ConcurrentHashMap()
+    private val attemptedAt = Collections.synchronizedMap(
+        object : LinkedHashMap<String, Long>(256, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean =
+                size > MAX_CACHE
+        }
+    )
 
-    private val executor = Executors.newSingleThreadExecutor()
-    private val attemptedAt = ConcurrentHashMap<String, Long>()
+    private val executor = ThreadPoolExecutor(
+        1,
+        1,
+        0L,
+        TimeUnit.MILLISECONDS,
+        ArrayBlockingQueue(64),
+        { runnable -> Thread(runnable, "taphive-geo").apply { isDaemon = true } },
+        { _, _ -> }
+    )
+
     @Volatile
     private var lastRequestMs = 0L
+
     @Volatile
     private var nextRequestMs = 0L
 
     fun lookup(ip: String) {
         if (ip.isBlank()) return
         if (isLocal(ip)) {
-            countries[ip] = LOCAL_LABEL
             database.upsertGeo(ip, LOCAL_LABEL, null)
             return
         }
         val now = System.currentTimeMillis()
-        if (now - (attemptedAt[ip] ?: 0L) < TTL_MS) return
+        val last = attemptedAt[ip] ?: 0L
+        if (now - last < TTL_MS) return
         attemptedAt[ip] = now
-        executor.execute { resolve(ip) }
+        try {
+            executor.execute { resolve(ip) }
+        } catch (_: RejectedExecutionException) {
+            // Bounded queue is full; leave this destination unenriched.
+        }
     }
 
     private fun resolve(ip: String) {
@@ -74,20 +90,19 @@ class IpGeoResolver(
                 nextRequestMs = max(nextRequestMs, System.currentTimeMillis() + result.delayMs)
             }
             val json = JSONObject(result.body)
-            if (json.optString("status") != "success") {
-                if (json.optString("message").contains("limit", ignoreCase = true)) {
-                    nextRequestMs = System.currentTimeMillis() + RATE_LIMIT_MS
-                }
-                return
-            }
+            if (!json.optBoolean("success", false)) return
             val country = json.optString("country").ifBlank { null }
-            val org = listOf("org", "isp", "as")
-                .map { json.optString(it) }
-                .firstOrNull { it.isNotBlank() }
-            if (country != null) countries[ip] = country
-            database.upsertGeo(ip, country, org)
+            val connection = json.optJSONObject("connection")
+            val org = connection?.let {
+                sequenceOf(it.optString("org"), it.optString("isp"))
+                    .firstOrNull { value -> value.isNotBlank() }
+                    ?: it.optInt("asn", 0).takeIf { asn -> asn > 0 }?.let { asn -> "AS$asn" }
+            }
+            if (country != null || org != null) {
+                database.upsertGeo(ip, country, org)
+            }
         } catch (_: Exception) {
-            // Offline, rate-limited or a non-public IP: keep the raw IP for now.
+            // Offline, rate-limited or a non-public IP: keep the raw IP.
         }
     }
 
@@ -109,58 +124,69 @@ class IpGeoResolver(
     }
 
     private fun fetch(ip: String): HttpResult {
-        val socket = Socket()
+        val url = URL(BASE_URL + ip + "?fields=success,country,connection")
+        val connection = (network?.openConnection(url) ?: url.openConnection())
+            as? HttpsURLConnection ?: throw IOException("enrichment requires HTTPS")
         try {
-            (network ?: Networks.underlying(context))?.bindSocket(socket)
-            socket.connect(InetSocketAddress(HOST, PORT), TIMEOUT_MS)
-            socket.soTimeout = TIMEOUT_MS
-            val request = "GET /json/$ip?fields=$FIELDS HTTP/1.1\r\n" +
-                "Host: $HOST\r\n" +
-                "User-Agent: TapHive/1.0\r\n" +
-                "Accept: application/json\r\n" +
-                "Connection: close\r\n\r\n"
-            socket.getOutputStream().write(request.toByteArray(Charsets.US_ASCII))
-            socket.getOutputStream().flush()
-
-            val text = String(socket.getInputStream().readBytes(), Charsets.UTF_8)
-            val split = text.indexOf("\r\n\r\n")
-            val head = if (split >= 0) text.substring(0, split) else ""
-            val body = if (split >= 0) text.substring(split + 4) else text
-            val lines = head.split("\r\n")
-            val status = lines.firstOrNull()
-                ?.substringAfter(" ", "")
-                ?.substringBefore(" ")
-                ?: ""
-            val headers = HashMap<String, String>()
-            lines.drop(1).forEach { line ->
-                val colon = line.indexOf(':')
-                if (colon > 0) {
-                    headers[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim()
-                }
+            connection.connectTimeout = TIMEOUT_MS
+            connection.readTimeout = TIMEOUT_MS
+            connection.instanceFollowRedirects = false
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("User-Agent", "TapHive/1.1")
+            connection.setRequestProperty("Accept", "application/json")
+            val status = connection.responseCode
+            if (status != 200) {
+                throw IOException("enrichment HTTP $status")
             }
-            val remaining = headers["x-rl"]?.toIntOrNull() ?: 45
-            val ttlSeconds = headers["x-ttl"]?.toLongOrNull() ?: 60L
-            val delay = if (remaining <= 0 || status == "429") ttlSeconds * 1000L else 0L
-            if (status != "200") throw IOException("ip-api HTTP $status")
-            return HttpResult(body, delay)
+            val body = connection.inputStream.use(::readLimited)
+            val retryAfterMs = connection.getHeaderField("Retry-After")
+                ?.toLongOrNull()
+                ?.times(1000L)
+                ?: 0L
+            return HttpResult(body, retryAfterMs)
         } finally {
-            try {
-                socket.close()
-            } catch (_: Exception) {
-            }
+            connection.disconnect()
         }
     }
 
+    private fun readLimited(input: InputStream): String {
+        val out = ByteArrayOutputStream()
+        val buffer = ByteArray(4096)
+        var total = 0
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            total += read
+            if (total > MAX_BODY_BYTES) throw IOException("enrichment response too large")
+            out.write(buffer, 0, read)
+        }
+        return out.toString("UTF-8")
+    }
+
     private fun isLocal(ip: String): Boolean {
-        if (ip == "::1" || ip.startsWith("fe80") || ip.startsWith("fc") || ip.startsWith("fd")) return true
-        val parts = ip.split('.')
-        if (parts.size != 4) return false
-        val a = parts[0].toIntOrNull() ?: return false
-        val b = parts[1].toIntOrNull() ?: return false
-        return a == 0 || a == 10 || a == 127 ||
-            (a == 100 && b in 64..127) ||
-            (a == 169 && b == 254) ||
-            (a == 172 && b in 16..31) ||
-            (a == 192 && b == 168)
+        val address = try {
+            InetAddress.getByName(ip)
+        } catch (_: Exception) {
+            return false
+        }
+        if (address.isAnyLocalAddress || address.isLoopbackAddress ||
+            address.isLinkLocalAddress || address.isSiteLocalAddress ||
+            address.isMulticastAddress
+        ) return true
+
+        val bytes = address.address
+        if (bytes.size == 4) {
+            val a = bytes[0].toInt() and 0xff
+            val b = bytes[1].toInt() and 0xff
+            return (a == 100 && b in 64..127) ||
+                (a == 192 && b == 0) ||
+                (a == 198 && (b == 18 || b == 19)) ||
+                a >= 240
+        }
+        if (bytes.size == 16) {
+            val first = bytes[0].toInt() and 0xff
+            return (first and 0xfe) == 0xfc // fc00::/7 ULA
+        }
+        return false
     }
 }

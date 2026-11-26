@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- The free ip-api.com tier is HTTP-only; permit cleartext for that host alone. -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">ip-api.com</domain>
-    </domain-config>
+    <!-- Enrichment uses HTTPS (ipwho.is). Raw syslog sockets are controlled by
+         the explicit UDP/TCP/TLS transport setting, not by this policy. -->
+    <base-config cleartextTrafficPermitted="false" />
 </network-security-config>

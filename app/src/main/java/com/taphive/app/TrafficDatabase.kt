@@ -92,6 +92,7 @@ class TrafficDatabase(
         val hours = prefs.retentionHours
         if (hours <= 0) {
             db.execSQL("DELETE FROM flows")
+            db.execSQL("DELETE FROM ip_meta")
         } else {
             val cutoff = System.currentTimeMillis() - hours * 3_600_000L
             db.delete("flows", "ts < ?", arrayOf(cutoff.toString()))
@@ -112,6 +113,7 @@ class TrafficDatabase(
     }
 
     fun upsertGeo(ip: String, country: String?, org: String?) {
+        if (prefs.retentionHours <= 0) return
         writableDatabase.execSQL(
             "INSERT INTO ip_meta(ip, country, org, updated_at) VALUES(?, ?, ?, ?) " +
                 "ON CONFLICT(ip) DO UPDATE SET " +
@@ -123,7 +125,7 @@ class TrafficDatabase(
     }
 
     fun upsertDnsName(ip: String, name: String) {
-        if (name.isBlank()) return
+        if (name.isBlank() || prefs.retentionHours <= 0) return
         writableDatabase.execSQL(
             "INSERT INTO ip_meta(ip, dns_name, updated_at) VALUES(?, ?, ?) " +
                 "ON CONFLICT(ip) DO UPDATE SET " +

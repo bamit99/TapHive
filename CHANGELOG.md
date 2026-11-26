@@ -10,6 +10,10 @@ All notable changes to TapHive are recorded here. v1.1 is in progress; the app v
 - Stopped exporting the internal `TrafficActivity`.
 - Removed the unconditional capture start from `Application.onCreate`, so the `startAtBoot` opt-in is no longer bypassed by process creation.
 - Added DNS parser bounds checks and fuzz coverage.
+- Added an explicit, default-off external enrichment consent checkbox.
+- Replaced cleartext ip-api lookups with HTTPS `ipwho.is`, bounded the response to 64 KiB, capped the lookup queue/cache, and removed the ip-api cleartext exemption.
+- Added TLS syslog (`tls` transport) using the platform trust store and hostname verification; TLS failures are surfaced as certificate errors and do not fall back to plaintext.
+- Made history-off delete the `ip_meta` cache and stop DNS/geo persistence.
 
 ### Reliability
 - Contained per-packet forwarding exceptions so a malformed packet cannot silently kill the packet loop while the VPN stays up.
@@ -31,8 +35,8 @@ All notable changes to TapHive are recorded here. v1.1 is in progress; the app v
 - README and BUILDPLAN updates are pending the remaining security/transport work.
 
 ### Outstanding
-- External IP enrichment still needs explicit opt-in/out and HTTPS.
-- Syslog still needs TLS with certificate/hostname validation and no silent downgrade.
+- TLS syslog has been verified failing closed against a self-signed listener; a successful TLS session against a system-trusted collector still needs a lab endpoint.
+- TLS pinning/mTLS is not implemented; TLS uses the platform trust store only.
 - Release signing is not configured; the published v1.0 APK is debuggable/debug-signed.
 - SQLite still needs WAL/index/migration work and off-thread writes; TRAFFIC still queries on the main thread.
 - TCP retransmission/half-close handling remains simplified; IPv6 forwarding remains deferred.

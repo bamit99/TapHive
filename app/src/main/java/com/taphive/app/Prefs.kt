@@ -19,6 +19,10 @@ class Prefs(context: Context) {
     /** 0 = no local history; otherwise how many hours of flows to keep. */
     val retentionHours: Int get() = store.getInt(KEY_RETENTION_HOURS, DEFAULT_RETENTION_HOURS)
 
+    /** Opt-in for sending public destination IPs to the HTTPS enrichment provider. */
+    val enrichmentEnabled: Boolean
+        get() = store.getBoolean(KEY_ENRICHMENT_ENABLED, false)
+
     /** True while the user wants capture active; survives process death. */
     val captureWanted: Boolean get() = store.getBoolean(KEY_CAPTURE_WANTED, false)
 
@@ -38,6 +42,10 @@ class Prefs(context: Context) {
 
     fun setStartAtBoot(enabled: Boolean) {
         store.edit().putBoolean(KEY_START_AT_BOOT, enabled).apply()
+    }
+
+    fun setEnrichmentEnabled(enabled: Boolean) {
+        store.edit().putBoolean(KEY_ENRICHMENT_ENABLED, enabled).apply()
     }
 
     fun markBatteryAsked() {
@@ -81,6 +89,7 @@ class Prefs(context: Context) {
         const val KEY_SYSLOG_FORMAT = "syslog_format"
         const val DEFAULT_SYSLOG_FORMAT = "rfc3164"
         const val KEY_RETENTION_HOURS = "retention_hours"
+        const val KEY_ENRICHMENT_ENABLED = "external_enrichment_enabled"
         const val KEY_CAPTURE_WANTED = "capture_wanted"
         const val KEY_START_AT_BOOT = "start_at_boot"
         const val KEY_BATTERY_ASKED = "battery_asked"

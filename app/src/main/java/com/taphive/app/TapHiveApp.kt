@@ -24,7 +24,7 @@ class TapHiveApp : Application() {
         database = TrafficDatabase(this, prefs)
         database.prune()
         tracker = TrafficTracker()
-        geoResolver = IpGeoResolver(this, database)
+        geoResolver = IpGeoResolver(database)
         appNameResolver = AppNameResolver(this)
 
         // Capture resume is driven by MainActivity (explicit foreground entry) or
