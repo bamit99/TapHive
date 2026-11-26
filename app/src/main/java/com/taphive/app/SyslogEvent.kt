@@ -5,7 +5,8 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
-private val UTC_MILLIS: DateTimeFormatter =
+/** RFC 3339 UTC timestamp shared by the JSON payload and the RFC 5424 header. */
+val UTC_MILLIS: DateTimeFormatter =
     DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
 
 data class SyslogEvent(

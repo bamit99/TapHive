@@ -15,6 +15,7 @@
     <string name="traffic_by_app">BY APPLICATION</string>
     <string name="traffic_by_country">BY COUNTRY</string>
     <string name="traffic_top_destinations">TOP DESTINATIONS</string>
+    <string name="top_applications">TOP APPLICATIONS</string>
     <string name="history_window">LOCAL HISTORY · LAST %1$s</string>
     <string name="history_placeholder">LOCAL HISTORY</string>
     <string name="history_off">LOCAL HISTORY OFF</string>
@@ -40,4 +41,9 @@
     <string name="license_title">Apache License 2.0</string>
     <string name="license_close">CLOSE</string>
     <string name="email_chooser">Email Amit</string>
+    <string name="exit_title">EXIT TAP HIVE?</string>
+    <string name="exit_message_running">Capture will keep running in the background.</string>
+    <string name="exit_message_idle">Return to the home screen?</string>
+    <string name="exit_action">EXIT</string>
+    <string name="exit_cancel">CANCEL</string>
 </resources>

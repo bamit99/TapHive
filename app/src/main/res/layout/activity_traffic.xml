@@ -60,6 +60,32 @@
         android:textSize="10sp"
         android:letterSpacing="0.14" />
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/tab_apps"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/neon_button_ghost"
+            android:text="@string/top_applications"
+            style="@style/NeonSmallButton" />
+
+        <Button
+            android:id="@+id/tab_destinations"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/neon_button_cyan"
+            android:text="@string/traffic_top_destinations"
+            style="@style/NeonSmallButton" />
+    </LinearLayout>
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -140,15 +166,17 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="12dp"
                 android:background="@drawable/neon_card"
                 android:orientation="vertical">
 
-                <TextView
+                <LinearLayout
+                    android:id="@+id/applications_list"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/traffic_top_destinations"
-                    style="@style/NeonLabel" />
+                    android:layout_marginTop="12dp"
+                    android:orientation="vertical"
+                    android:visibility="gone" />
 
                 <LinearLayout
                     android:id="@+id/destinations_list"

@@ -12,6 +12,10 @@ class Prefs(context: Context) {
     val facility: Int get() = store.getInt(KEY_FACILITY, DEFAULT_FACILITY)
     val appName: String get() = store.getString(KEY_APP_NAME, "TapHive") ?: "TapHive"
 
+    /** "rfc3164" (default) or "rfc5424" — only the header format changes. */
+    val syslogFormat: String
+        get() = store.getString(KEY_SYSLOG_FORMAT, DEFAULT_SYSLOG_FORMAT) ?: DEFAULT_SYSLOG_FORMAT
+
     /** 0 = no local history; otherwise how many hours of flows to keep. */
     val retentionHours: Int get() = store.getInt(KEY_RETENTION_HOURS, DEFAULT_RETENTION_HOURS)
 
@@ -40,7 +44,15 @@ class Prefs(context: Context) {
         store.edit().putBoolean(KEY_BATTERY_ASKED, true).apply()
     }
 
-    fun save(enabled: Boolean, host: String, port: Int, transport: String, facility: Int, appName: String) {
+    fun save(
+        enabled: Boolean,
+        host: String,
+        port: Int,
+        transport: String,
+        facility: Int,
+        appName: String,
+        format: String
+    ) {
         store.edit()
             .putBoolean(KEY_ENABLED, enabled)
             .putString(KEY_HOST, host.trim())
@@ -48,6 +60,7 @@ class Prefs(context: Context) {
             .putString(KEY_TRANSPORT, transport)
             .putInt(KEY_FACILITY, facility)
             .putString(KEY_APP_NAME, appName.trim().ifEmpty { "TapHive" })
+            .putString(KEY_SYSLOG_FORMAT, if (format == "rfc5424") "rfc5424" else "rfc3164")
             .apply()
     }
 
@@ -65,6 +78,8 @@ class Prefs(context: Context) {
         const val KEY_TRANSPORT = "syslog_transport"
         const val KEY_FACILITY = "syslog_facility"
         const val KEY_APP_NAME = "syslog_app_name"
+        const val KEY_SYSLOG_FORMAT = "syslog_format"
+        const val DEFAULT_SYSLOG_FORMAT = "rfc3164"
         const val KEY_RETENTION_HOURS = "retention_hours"
         const val KEY_CAPTURE_WANTED = "capture_wanted"
         const val KEY_START_AT_BOOT = "start_at_boot"

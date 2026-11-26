@@ -30,6 +30,12 @@ class TrafficDatabase(
         val dnsName: String?
     )
 
+    data class AppRow(
+        val uid: Int,
+        val bytes: Long,
+        val flows: Long
+    )
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE flows (" +
@@ -127,14 +133,17 @@ class TrafficDatabase(
         )
     }
 
-    /** uid -> total bytes, largest first. */
-    fun appShares(): List<Pair<Int, Long>> {
-        val rows = ArrayList<Pair<Int, Long>>()
+    /** uid -> total bytes and flow count, largest first. */
+    fun appRows(): List<AppRow> {
+        val rows = ArrayList<AppRow>()
         readableDatabase.rawQuery(
-            "SELECT uid, SUM(bytes) AS total FROM flows GROUP BY uid HAVING total > 0 ORDER BY total DESC",
+            "SELECT uid, SUM(bytes) AS total, COUNT(*) AS cnt FROM flows " +
+                "GROUP BY uid HAVING total > 0 ORDER BY total DESC",
             null
         ).use { cursor ->
-            while (cursor.moveToNext()) rows.add(cursor.getInt(0) to cursor.getLong(1))
+            while (cursor.moveToNext()) {
+                rows.add(AppRow(cursor.getInt(0), cursor.getLong(1), cursor.getLong(2)))
+            }
         }
         return rows
     }

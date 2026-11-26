@@ -2,6 +2,7 @@ package com.taphive.app
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -25,6 +26,7 @@ class MainActivity : Activity() {
     private lateinit var syslogInfo: TextView
     private lateinit var statsInfo: TextView
     private lateinit var captureToggle: Button
+    private var exitDialog: AlertDialog? = null
     private val handler = Handler(Looper.getMainLooper())
     private val statusPoll = object : Runnable {
         override fun run() {
@@ -115,6 +117,22 @@ class MainActivity : Activity() {
     override fun onPause() {
         handler.removeCallbacks(statusPoll)
         super.onPause()
+    }
+
+    override fun onBackPressed() {
+        if (exitDialog?.isShowing == true) return
+        val message = if (CaptureService.isRunning) {
+            R.string.exit_message_running
+        } else {
+            R.string.exit_message_idle
+        }
+        exitDialog = AlertDialog.Builder(this)
+            .setTitle(R.string.exit_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.exit_action) { _, _ -> finishAffinity() }
+            .setNegativeButton(R.string.exit_cancel, null)
+            .setOnDismissListener { exitDialog = null }
+            .show()
     }
 
     private fun requestStart() {

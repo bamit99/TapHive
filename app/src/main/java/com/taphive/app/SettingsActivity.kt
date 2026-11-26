@@ -22,6 +22,7 @@ class SettingsActivity : Activity() {
         val host = findViewById<EditText>(R.id.syslog_host)
         val port = findViewById<EditText>(R.id.syslog_port)
         val transport = findViewById<Spinner>(R.id.syslog_transport)
+        val format = findViewById<Spinner>(R.id.syslog_format)
         val facility = findViewById<EditText>(R.id.syslog_facility)
         val appName = findViewById<EditText>(R.id.syslog_app_name)
         val startAtBoot = findViewById<CheckBox>(R.id.start_at_boot)
@@ -39,6 +40,13 @@ class SettingsActivity : Activity() {
             arrayOf("udp", "tcp")
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
+        val formatValues = arrayOf("rfc3164", "rfc5424")
+        format.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            arrayOf("RFC 3164 (BSD)", "RFC 5424")
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+
         val retentionLabels = arrayOf("Off", "1 hour", "6 hours", "24 hours", "7 days")
         val retentionHours = intArrayOf(0, 1, 6, 24, 168)
         retention.adapter = ArrayAdapter(
@@ -51,6 +59,7 @@ class SettingsActivity : Activity() {
         host.setText(prefs.host)
         port.setText(prefs.port.toString())
         transport.setSelection(if (prefs.transport == "tcp") 1 else 0)
+        format.setSelection(formatValues.indexOf(prefs.syslogFormat).coerceAtLeast(0))
         facility.setText(prefs.facility.toString())
         appName.setText(prefs.appName)
         startAtBoot.isChecked = prefs.startAtBoot
@@ -86,7 +95,8 @@ class SettingsActivity : Activity() {
                 portValue,
                 transport.selectedItem as String,
                 facilityValue,
-                appName.text.toString()
+                appName.text.toString(),
+                formatValues[format.selectedItemPosition]
             )
             Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
             finish()

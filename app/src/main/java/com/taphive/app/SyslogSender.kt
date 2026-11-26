@@ -121,6 +121,15 @@ class SyslogSender(private val prefs: Prefs) {
         } else {
             event.toJson()
         }
+        if (prefs.syslogFormat == "rfc5424") {
+            // <PRI>VERSION TIMESTAMP HOSTNAME APP-NAME PROCID MSGID STRUCTURED-DATA MSG
+            // Structured data is the NILVALUE; all fields stay in the versioned JSON MSG.
+            val pid = Process.myPid().toString()
+            val msgId = event.event.replace(Regex("[^A-Za-z0-9_.-]"), "_").take(32).ifEmpty { "-" }
+            return "<$pri>1 ${UTC_MILLIS.format(event.timestamp)} " +
+                "${host.take(255).ifEmpty { "-" }} ${app.take(48).ifEmpty { "-" }} " +
+                "$pid $msgId - $json"
+        }
         return "<$pri>$timestamp $host $app[${Process.myPid()}]: $json"
     }
 

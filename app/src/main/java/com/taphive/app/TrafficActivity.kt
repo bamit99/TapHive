@@ -23,8 +23,12 @@ class TrafficActivity : Activity() {
     private lateinit var pieCountry: PieChartView
     private lateinit var legendApp: LinearLayout
     private lateinit var legendCountry: LinearLayout
+    private lateinit var applicationsList: LinearLayout
     private lateinit var destinationsList: LinearLayout
+    private lateinit var tabApps: Button
+    private lateinit var tabDestinations: Button
     private lateinit var historyInfo: TextView
+    private var showApps = false
     private var lastSignature = ""
     private val handler = Handler(Looper.getMainLooper())
     private val poll = object : Runnable {
@@ -42,13 +46,31 @@ class TrafficActivity : Activity() {
         pieCountry = findViewById(R.id.pie_country)
         legendApp = findViewById(R.id.legend_app)
         legendCountry = findViewById(R.id.legend_country)
+        applicationsList = findViewById(R.id.applications_list)
         destinationsList = findViewById(R.id.destinations_list)
+        tabApps = findViewById(R.id.tab_apps)
+        tabDestinations = findViewById(R.id.tab_destinations)
         historyInfo = findViewById(R.id.history_info)
 
-        findViewById<Button>(R.id.back).setOnClickListener { finish() }
+        tabApps.setOnClickListener { selectTab(true) }
+        tabDestinations.setOnClickListener { selectTab(false) }
+        findViewById<Button>(R.id.back).setOnClickListener { returnToMain() }
         findViewById<Button>(R.id.info).setOnClickListener {
             startActivity(Intent(this, AboutActivity::class.java))
         }
+    }
+
+    private fun selectTab(apps: Boolean) {
+        if (showApps == apps) return
+        showApps = apps
+        applicationsList.visibility = if (apps) View.VISIBLE else View.GONE
+        destinationsList.visibility = if (apps) View.GONE else View.VISIBLE
+        tabApps.setBackgroundResource(
+            if (apps) R.drawable.neon_button_cyan else R.drawable.neon_button_ghost
+        )
+        tabDestinations.setBackgroundResource(
+            if (apps) R.drawable.neon_button_ghost else R.drawable.neon_button_cyan
+        )
     }
 
     override fun onResume() {
@@ -61,6 +83,20 @@ class TrafficActivity : Activity() {
         super.onPause()
     }
 
+    override fun onBackPressed() {
+        returnToMain()
+    }
+
+    /** Always land on the capture screen, even when launched directly. */
+    private fun returnToMain() {
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+        )
+        finish()
+    }
+
     private fun render() {
         val app = application as TapHiveApp
         val hours = app.prefs.retentionHours
@@ -70,20 +106,21 @@ class TrafficActivity : Activity() {
             getString(R.string.history_window, retentionLabel(hours))
         }
 
-        val appShares = if (hours <= 0) emptyList() else app.database.appShares()
+        val appRows = if (hours <= 0) emptyList() else app.database.appRows()
         val countryShares = if (hours <= 0) emptyList() else app.database.countryShares()
         val rows = if (hours <= 0) emptyList() else app.database.topDestinations(10)
 
-        val signature = signatureOf(appShares, countryShares, rows)
+        val signature = signatureOf(appRows, countryShares, rows)
         if (signature == lastSignature) return
         lastSignature = signature
 
         // -- By application -------------------------------------------------
-        val appTotal = appShares.sumOf { it.second }
-        val appSlices = appShares.mapIndexed { index, (uid, bytes) ->
+        val appTotal = appRows.sumOf { it.bytes }
+        val appNames = appRows.map { app.appNameResolver.name(it.uid) }
+        val appSlices = appRows.mapIndexed { index, row ->
             PieChartView.Slice(
-                app.appNameResolver.name(uid),
-                bytes.toFloat() / maxOf(appTotal, 1L),
+                appNames[index],
+                row.bytes.toFloat() / maxOf(appTotal, 1L),
                 PIE_COLORS[index % PIE_COLORS.size]
             )
         }
@@ -104,63 +141,104 @@ class TrafficActivity : Activity() {
         pieCountry.centerText = formatBytes(countryTotal)
         buildLegend(legendCountry, countrySlices)
 
-        // -- Top destinations -----------------------------------------------
-        destinationsList.removeAllViews()
+        // -- Top lists -------------------------------------------------------
+        val emptyMessage = if (hours <= 0) {
+            getString(R.string.history_off_hint)
+        } else {
+            getString(R.string.no_traffic)
+        }
+        buildAppList(applicationsList, appRows, appNames, appTotal, emptyMessage)
+        buildDestinationList(destinationsList, rows, emptyMessage)
+    }
+
+    private fun buildAppList(
+        container: LinearLayout,
+        rows: List<TrafficDatabase.AppRow>,
+        names: List<String>,
+        total: Long,
+        emptyMessage: String
+    ) {
+        container.removeAllViews()
         if (rows.isEmpty()) {
-            val message = if (hours <= 0) {
-                getString(R.string.history_off_hint)
-            } else {
-                getString(R.string.no_traffic)
-            }
-            destinationsList.addView(emptyLabel(message))
+            container.addView(emptyLabel(emptyMessage))
+            return
+        }
+        for (index in rows.indices) {
+            val row = rows[index]
+            val share = Math.round(row.bytes.toFloat() * 100 / maxOf(total, 1L))
+            val flowLabel = if (row.flows == 1L) "flow" else "flows"
+            addRow(
+                container,
+                names[index],
+                "UID ${row.uid} · $share% of traffic · ${row.flows} $flowLabel",
+                formatBytes(row.bytes)
+            )
+        }
+    }
+
+    private fun buildDestinationList(
+        container: LinearLayout,
+        rows: List<TrafficDatabase.DestinationRow>,
+        emptyMessage: String
+    ) {
+        container.removeAllViews()
+        if (rows.isEmpty()) {
+            container.addView(emptyLabel(emptyMessage))
             return
         }
         for (row in rows) {
-            val rowView = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                )
-                setPadding(0, 8, 0, 8)
-            }
-            val left = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(
-                    0,
-                    LinearLayout.LayoutParams.WRAP_CONTENT,
-                    1f
-                )
-            }
             val label = row.dnsName ?: row.org ?: row.ip
-            val ipText = TextView(this).apply {
-                text = label
-                setTextColor(context.getColor(R.color.neon_cyan))
-                textSize = 14f
-                setTypeface(android.graphics.Typeface.DEFAULT_BOLD)
+            val subText = buildString {
+                append(row.ip)
+                append(" · port ${row.port} · ${protocolName(row.protocol)}")
+                row.country?.let { append(" · $it") }
             }
-            val subText = TextView(this).apply {
-                text = buildString {
-                    append(row.ip)
-                    append(" · port ${row.port} · ${protocolName(row.protocol)}")
-                    row.country?.let { append(" · $it") }
-                }
-                setTextColor(context.getColor(R.color.neon_muted))
-                textSize = 10f
-                letterSpacing = 0.06f
-            }
-            left.addView(ipText)
-            left.addView(subText)
-            val bytesText = TextView(this).apply {
-                text = formatBytes(row.bytes)
-                setTextColor(context.getColor(R.color.neon_cyan_soft))
-                textSize = 12f
-                setTypeface(android.graphics.Typeface.DEFAULT_BOLD)
-            }
-            rowView.addView(left)
-            rowView.addView(bytesText)
-            destinationsList.addView(rowView)
+            addRow(container, label, subText, formatBytes(row.bytes))
         }
+    }
+
+    private fun addRow(
+        container: LinearLayout,
+        labelText: String,
+        subText: String,
+        bytesText: String
+    ) {
+        val rowView = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+            setPadding(0, 8, 0, 8)
+        }
+        val left = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f
+            )
+        }
+        left.addView(TextView(this).apply {
+            text = labelText
+            setTextColor(context.getColor(R.color.neon_cyan))
+            textSize = 14f
+            setTypeface(android.graphics.Typeface.DEFAULT_BOLD)
+        })
+        left.addView(TextView(this).apply {
+            text = subText
+            setTextColor(context.getColor(R.color.neon_muted))
+            textSize = 10f
+            letterSpacing = 0.06f
+        })
+        rowView.addView(left)
+        rowView.addView(TextView(this).apply {
+            text = bytesText
+            setTextColor(context.getColor(R.color.neon_cyan_soft))
+            textSize = 12f
+            setTypeface(android.graphics.Typeface.DEFAULT_BOLD)
+        })
+        container.addView(rowView)
     }
 
     private fun emptyLabel(message: String) = TextView(this).apply {
@@ -204,11 +282,11 @@ class TrafficActivity : Activity() {
     }
 
     private fun signatureOf(
-        apps: List<Pair<Int, Long>>,
+        apps: List<TrafficDatabase.AppRow>,
         countries: List<Pair<String, Long>>,
         rows: List<TrafficDatabase.DestinationRow>
     ): String = buildString {
-        append(apps.joinToString { "${it.first}:${it.second}" })
+        append(apps.joinToString { "${it.uid}:${it.bytes}:${it.flows}" })
         append('|')
         append(countries.joinToString { "${it.first}:${it.second}" })
         append('|')
