@@ -14,6 +14,9 @@ All notable changes to TapHive are recorded here. v1.1 is in progress; the app v
 - Replaced cleartext ip-api lookups with HTTPS `ipwho.is`, bounded the response to 64 KiB, capped the lookup queue/cache, and removed the ip-api cleartext exemption.
 - Added TLS syslog (`tls` transport) using the platform trust store and hostname verification; TLS failures are surfaced as certificate errors and do not fall back to plaintext.
 - Made history-off delete the `ip_meta` cache and stop DNS/geo persistence.
+- Fixed the Android 16 status pulse restart every second.
+- Stopped queuing syslog events while forwarding is disabled and made drop counters atomic.
+- Guarded spinner indexing against `-1` during settings save.
 
 ### Reliability
 - Contained per-packet forwarding exceptions so a malformed packet cannot silently kill the packet loop while the VPN stays up.
@@ -25,6 +28,13 @@ All notable changes to TapHive are recorded here. v1.1 is in progress; the app v
 - Added flow-counter atomics and throttled flow expiry to once per second.
 - Added connectivity callbacks and resolved the real non-VPN default network; helper sockets no longer bind to TapHive's own VPN.
 - Recovered Android 16 back handling with `OnBackInvokedCallback` plus the legacy API-32 fallback. Device-verified on API 36.
+
+### Persistence and performance
+- Added a non-destructive SQLite v2 migration, `flow_id` tracking, WAL, and indexes for UID/destination queries.
+- Moved flow-history inserts onto a bounded single-thread writer; the packet thread no longer waits for disk I/O.
+- Moved TRAFFIC aggregate queries off the main thread and coalesced overlapping refreshes.
+- “Flows” counts now use distinct flow ids instead of counting 10-second sample rows.
+- Device-verified migration from the existing v1 database (`user_version=2`, history preserved) and TRAFFIC rendering.
 
 ### Tests
 - Added JUnit tests for IPv4/IPv6 parsing, fragment rejection, flow-key symmetry, DNS A-record parsing, truncated responses, query rejection, and 5,000-iteration DNS fuzz input.
@@ -38,7 +48,7 @@ All notable changes to TapHive are recorded here. v1.1 is in progress; the app v
 - TLS syslog has been verified failing closed against a self-signed listener; a successful TLS session against a system-trusted collector still needs a lab endpoint.
 - TLS pinning/mTLS is not implemented; TLS uses the platform trust store only.
 - Release signing is not configured; the published v1.0 APK is debuggable/debug-signed.
-- SQLite still needs WAL/index/migration work and off-thread writes; TRAFFIC still queries on the main thread.
 - TCP retransmission/half-close handling remains simplified; IPv6 forwarding remains deferred.
+- History is still plaintext at rest inside the app sandbox (backup/device-transfer excluded).
 - Public screenshots still contain real usage data and must be replaced with demo data.
 - v1.1 version bump and signed release APK are pending validation.

@@ -33,8 +33,10 @@ class TrafficActivity : Activity() {
     private lateinit var historyInfo: TextView
     private var showApps = false
     private var lastSignature = ""
+    private var querying = false
     private var backCallback: OnBackInvokedCallback? = null
     private val handler = Handler(Looper.getMainLooper())
+    private val queryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val poll = object : Runnable {
         override fun run() {
             render()
@@ -106,6 +108,7 @@ class TrafficActivity : Activity() {
             backCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) }
         }
         backCallback = null
+        queryExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -128,10 +131,27 @@ class TrafficActivity : Activity() {
             getString(R.string.history_window, retentionLabel(hours))
         }
 
-        val appRows = if (hours <= 0) emptyList() else app.database.appRows()
-        val countryShares = if (hours <= 0) emptyList() else app.database.countryShares()
-        val rows = if (hours <= 0) emptyList() else app.database.topDestinations(10)
+        if (querying) return
+        querying = true
+        queryExecutor.execute {
+            val appRows = if (hours <= 0) emptyList() else app.database.appRows()
+            val countryShares = if (hours <= 0) emptyList() else app.database.countryShares()
+            val rows = if (hours <= 0) emptyList() else app.database.topDestinations(10)
+            runOnUiThread {
+                querying = false
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                applyData(app, hours, appRows, countryShares, rows)
+            }
+        }
+    }
 
+    private fun applyData(
+        app: TapHiveApp,
+        hours: Int,
+        appRows: List<TrafficDatabase.AppRow>,
+        countryShares: List<Pair<String, Long>>,
+        rows: List<TrafficDatabase.DestinationRow>
+    ) {
         val signature = signatureOf(appRows, countryShares, rows)
         if (signature == lastSignature) return
         lastSignature = signature

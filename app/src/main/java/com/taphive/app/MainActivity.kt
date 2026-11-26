@@ -33,6 +33,7 @@ class MainActivity : Activity() {
     private lateinit var captureToggle: Button
     private var exitDialog: AlertDialog? = null
     private var backCallback: OnBackInvokedCallback? = null
+    private var lastRunning: Boolean? = null
     private val handler = Handler(Looper.getMainLooper())
     private val statusPoll = object : Runnable {
         override fun run() {
@@ -192,22 +193,24 @@ class MainActivity : Activity() {
 
     private fun updateStatus() {
         val running = CaptureService.isRunning
-        status.setText(if (running) R.string.status_running else R.string.status_idle)
-        statusDot.setBackgroundResource(if (running) R.drawable.dot_green else R.drawable.dot_dim)
-        captureToggle.setText(if (running) R.string.stop_capture else R.string.start_capture)
-        captureToggle.setBackgroundResource(
-            if (running) R.drawable.neon_button_magenta else R.drawable.neon_button_cyan
-        )
-
-        if (running && statusDot.animation == null) {
-            val pulse = AlphaAnimation(1f, 0.35f).apply {
-                duration = 700
-                repeatMode = Animation.REVERSE
-                repeatCount = Animation.INFINITE
+        if (lastRunning != running) {
+            lastRunning = running
+            status.setText(if (running) R.string.status_running else R.string.status_idle)
+            statusDot.setBackgroundResource(if (running) R.drawable.dot_green else R.drawable.dot_dim)
+            captureToggle.setText(if (running) R.string.stop_capture else R.string.start_capture)
+            captureToggle.setBackgroundResource(
+                if (running) R.drawable.neon_button_magenta else R.drawable.neon_button_cyan
+            )
+            if (running) {
+                val pulse = AlphaAnimation(1f, 0.35f).apply {
+                    duration = 700
+                    repeatMode = Animation.REVERSE
+                    repeatCount = Animation.INFINITE
+                }
+                statusDot.startAnimation(pulse)
+            } else {
+                statusDot.clearAnimation()
             }
-            statusDot.startAnimation(pulse)
-        } else {
-            statusDot.clearAnimation()
         }
 
         val app = application as TapHiveApp

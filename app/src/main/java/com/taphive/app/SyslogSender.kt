@@ -33,11 +33,8 @@ class SyslogSender(private val prefs: Prefs) {
     @Volatile
     private var running = true
 
-    @Volatile
-    private var dropped = 0L
-
-    @Volatile
-    private var backoffDropped = 0L
+    private val dropped = AtomicLong(0)
+    private val backoffDropped = AtomicLong(0)
 
     @Volatile
     var lastError: String? = null
@@ -68,8 +65,11 @@ class SyslogSender(private val prefs: Prefs) {
 
     fun resetForwardedCount() {
         // Keep the queue: an unsent capture_stop from the previous session must still
-        // be delivered. Only the forward counter is scoped to the new session.
+        // be delivered. Only the counters are scoped to the new session.
         forwarded.set(0)
+        dropped.set(0)
+        backoffDropped.set(0)
+        lastError = null
     }
 
     /** Network used for syslog traffic so it never enters our own VPN tunnel. */
@@ -121,9 +121,14 @@ class SyslogSender(private val prefs: Prefs) {
     }
 
     fun enqueue(event: SyslogEvent) {
+        // Do not churn the queue or surface drop warnings for a disabled target.
+        if (!prefs.enabled || prefs.host.isBlank()) {
+            lastError = null
+            return
+        }
         if (!queue.offer(event)) {
-            dropped++
-            lastError = "syslog queue full; dropped $dropped events"
+            val count = dropped.incrementAndGet()
+            lastError = "syslog queue full; dropped $count events"
         }
     }
 
@@ -167,7 +172,7 @@ class SyslogSender(private val prefs: Prefs) {
         val app = prefs.appName.replace(Regex("[^A-Za-z0-9_.-]"), "_")
         val json = if (event.event.startsWith("capture_")) {
             event.copy(
-                droppedEvents = dropped,
+                droppedEvents = dropped.get(),
                 // Snapshot at send time so queued flow-close events are included.
                 eventsForwarded = if (event.event == "capture_stop") forwarded.get() else event.eventsForwarded
             ).toJson()
@@ -189,9 +194,9 @@ class SyslogSender(private val prefs: Prefs) {
     private fun send(message: String) {
         val now = System.currentTimeMillis()
         if (now < nextRetryMs) {
-            backoffDropped++
+            val count = backoffDropped.incrementAndGet()
             if (lastFailureError == null) {
-                lastError = "syslog backoff active; dropped $backoffDropped events"
+                lastError = "syslog backoff active; dropped $count events"
             }
             targetState = SyslogTargetState.FAILED
             return

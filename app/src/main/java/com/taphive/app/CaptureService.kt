@@ -17,6 +17,10 @@ import android.os.Looper
 import android.os.ParcelFileDescriptor
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 class CaptureService : VpnService(), PacketReader.FlowSink {
     private lateinit var uidResolver: UidResolver
@@ -26,6 +30,16 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
     private var forwarder: Ipv4TunnelForwarder? = null
     private var networkCallback: NetworkCallback? = null
     private var sessionId = ""
+
+    private val dbWriter = ThreadPoolExecutor(
+        1,
+        1,
+        0L,
+        TimeUnit.MILLISECONDS,
+        ArrayBlockingQueue(1024),
+        { runnable -> Thread(runnable, "taphive-db").apply { isDaemon = true } },
+        { _, _ -> }
+    )
 
     private val app: TapHiveApp
         get() = application as TapHiveApp
@@ -208,14 +222,22 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
 
     override fun onFlowBytes(flowId: Long, timestampMs: Long, bytesDelta: Long) {
         val flow = app.tracker.openFlow(flowId) ?: return
-        app.database.recordFlow(
-            ts = timestampMs,
-            uid = flow.uid,
-            ip = flow.dstIp,
-            port = flow.dstPort,
-            protocol = flow.protocol,
-            bytes = bytesDelta
-        )
+        val id = flowId.toString()
+        try {
+            dbWriter.execute {
+                app.database.recordFlow(
+                    ts = timestampMs,
+                    flowId = id,
+                    uid = flow.uid,
+                    ip = flow.dstIp,
+                    port = flow.dstPort,
+                    protocol = flow.protocol,
+                    bytes = bytesDelta
+                )
+            }
+        } catch (_: RejectedExecutionException) {
+            // History is best-effort; never block the packet thread on disk.
+        }
     }
 
     override fun onFlowClose(
@@ -379,6 +401,7 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
 
     override fun onDestroy() {
         releaseCapture(emitLifecycle = true)
+        dbWriter.shutdown()
         super.onDestroy()
     }
 

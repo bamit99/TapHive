@@ -36,19 +36,23 @@ class TrafficDatabase(
         val flows: Long
     )
 
+    init {
+        setWriteAheadLoggingEnabled(true)
+    }
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE flows (" +
                 "_id INTEGER PRIMARY KEY AUTOINCREMENT," +
                 "ts INTEGER NOT NULL," +
+                "flow_id TEXT NOT NULL DEFAULT ''," +
                 "uid INTEGER NOT NULL," +
                 "ip TEXT NOT NULL," +
                 "port INTEGER NOT NULL," +
                 "protocol INTEGER NOT NULL," +
                 "bytes INTEGER NOT NULL)"
         )
-        db.execSQL("CREATE INDEX idx_flows_ts ON flows(ts)")
-        db.execSQL("CREATE INDEX idx_flows_ip ON flows(ip)")
+        createIndexes(db)
         db.execSQL(
             "CREATE TABLE ip_meta (" +
                 "ip TEXT PRIMARY KEY," +
@@ -57,21 +61,44 @@ class TrafficDatabase(
                 "dns_name TEXT," +
                 "updated_at INTEGER NOT NULL)"
         )
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_ip_meta_updated ON ip_meta(updated_at)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS flows")
-        db.execSQL("DROP TABLE IF EXISTS ip_meta")
-        onCreate(db)
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE flows ADD COLUMN flow_id TEXT NOT NULL DEFAULT ''")
+            createIndexes(db)
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_ip_meta_updated ON ip_meta(updated_at)")
+        }
     }
 
-    fun recordFlow(ts: Long, uid: Int, ip: String, port: Int, protocol: Int, bytes: Long) {
+    private fun createIndexes(db: SQLiteDatabase) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_flows_ts ON flows(ts)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_flows_ip ON flows(ip)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_flows_uid ON flows(uid)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_flows_flow_id ON flows(flow_id)")
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_flows_destination " +
+                "ON flows(ip, port, protocol, uid)"
+        )
+    }
+
+    fun recordFlow(
+        ts: Long,
+        flowId: String,
+        uid: Int,
+        ip: String,
+        port: Int,
+        protocol: Int,
+        bytes: Long
+    ) {
         if (bytes <= 0L || prefs.retentionHours <= 0) return
         writableDatabase.insert(
             "flows",
             null,
             ContentValues().apply {
                 put("ts", ts)
+                put("flow_id", flowId)
                 put("uid", uid)
                 put("ip", ip)
                 put("port", port)
@@ -139,7 +166,7 @@ class TrafficDatabase(
     fun appRows(): List<AppRow> {
         val rows = ArrayList<AppRow>()
         readableDatabase.rawQuery(
-            "SELECT uid, SUM(bytes) AS total, COUNT(*) AS cnt FROM flows " +
+            "SELECT uid, SUM(bytes) AS total, COUNT(DISTINCT flow_id) AS cnt FROM flows " +
                 "GROUP BY uid HAVING total > 0 ORDER BY total DESC",
             null
         ).use { cursor ->
@@ -179,8 +206,9 @@ class TrafficDatabase(
     fun topDestinations(limit: Int): List<DestinationRow> {
         val rows = ArrayList<DestinationRow>()
         readableDatabase.rawQuery(
-            "SELECT f.ip, f.port, f.protocol, f.uid, SUM(f.bytes) AS total, COUNT(*) AS cnt, " +
-                "m.country, m.org, m.dns_name FROM flows f LEFT JOIN ip_meta m ON m.ip = f.ip " +
+            "SELECT f.ip, f.port, f.protocol, f.uid, SUM(f.bytes) AS total, " +
+                "COUNT(DISTINCT f.flow_id) AS cnt, m.country, m.org, m.dns_name " +
+                "FROM flows f LEFT JOIN ip_meta m ON m.ip = f.ip " +
                 "GROUP BY f.ip, f.port, f.protocol, f.uid ORDER BY total DESC LIMIT ?",
             arrayOf(limit.toString())
         ).use { cursor ->
@@ -205,7 +233,7 @@ class TrafficDatabase(
 
     private companion object {
         const val DB_NAME = "taphive_history.db"
-        const val DB_VERSION = 1
+        const val DB_VERSION = 2
         const val PRUNE_INTERVAL_MS = 60_000L
         const val META_TTL_MS = 30L * 24 * 3_600_000L
     }

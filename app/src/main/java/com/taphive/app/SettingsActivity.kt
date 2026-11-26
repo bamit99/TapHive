@@ -94,9 +94,13 @@ class SettingsActivity : Activity() {
                     return@setOnClickListener
                 }
             }
+            val retentionIndex = retention.selectedItemPosition
+                .coerceIn(0, retentionHours.lastIndex)
+            val formatIndex = format.selectedItemPosition
+                .coerceIn(0, formatValues.lastIndex)
             prefs.setStartAtBoot(startAtBoot.isChecked)
             prefs.setEnrichmentEnabled(enrichment.isChecked)
-            prefs.saveRetention(retentionHours[retention.selectedItemPosition])
+            prefs.saveRetention(retentionHours[retentionIndex])
             app.database.prune()
             prefs.save(
                 enabled.isChecked,
@@ -105,7 +109,7 @@ class SettingsActivity : Activity() {
                 transport.selectedItem as String,
                 facilityValue,
                 appName.text.toString(),
-                formatValues[format.selectedItemPosition]
+                formatValues[formatIndex]
             )
             Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
             finish()
