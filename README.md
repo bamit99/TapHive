@@ -15,6 +15,31 @@ TapHive is a clean-room Android app that captures **network flow metadata** on a
 - Live counters show raw packets captured from the VPN fd and syslog events successfully forwarded; the same totals are included on `capture_start`/`capture_stop` events.
 - No third-party runtime dependencies; only the Android Gradle plugin and Kotlin plugin are used at build time.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/01-main.png" width="240" alt="Main screen"></td>
+    <td><img src="docs/screenshots/02-traffic-applications.png" width="240" alt="Traffic by application"></td>
+    <td><img src="docs/screenshots/03-traffic-destinations.png" width="240" alt="Top destinations"></td>
+  </tr>
+  <tr>
+    <td align="center">Main</td>
+    <td align="center">Traffic by application</td>
+    <td align="center">Top destinations</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/04-syslog-target.png" width="240" alt="Syslog target settings"></td>
+    <td><img src="docs/screenshots/05-about.png" width="240" alt="About screen"></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td align="center">Syslog target</td>
+    <td align="center">About</td>
+    <td></td>
+  </tr>
+</table>
+
 ## Architecture
 
 ```text
