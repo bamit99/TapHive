@@ -45,6 +45,17 @@ class TrafficDatabaseTest {
     }
 
     @Test
+    fun unresolvedIpsDropsAfterCountryLookup() {
+        database.recordFlow(
+            System.currentTimeMillis(), "flow-1", 1000, "116.119.113.161", 443, 17, 100
+        )
+        assertEquals(listOf("116.119.113.161"), database.unresolvedIps(10))
+
+        database.upsertGeo("116.119.113.161", "India", "Bharti Airtel")
+        assertEquals(emptyList<String>(), database.unresolvedIps(10))
+    }
+
+    @Test
     fun retentionOffClearsFlowsAndMetadata() {
         prefs.saveRetention(24)
         database.recordFlow(

@@ -34,6 +34,7 @@ class TrafficActivity : Activity() {
     private var showApps = false
     private var lastSignature = ""
     private var querying = false
+    private var backfillRequested = false
     private var backCallback: OnBackInvokedCallback? = null
     private val handler = Handler(Looper.getMainLooper())
     private val queryExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -142,9 +143,18 @@ class TrafficActivity : Activity() {
                 app.database.countryShares()
             }
             val rows = if (hours <= 0) emptyList() else app.database.topDestinations(10)
+            val unresolved = if (enrichment && !backfillRequested) {
+                app.database.unresolvedIps(50)
+            } else {
+                emptyList()
+            }
             runOnUiThread {
                 querying = false
                 if (isFinishing || isDestroyed) return@runOnUiThread
+                if (enrichment && !backfillRequested) {
+                    backfillRequested = true
+                    unresolved.forEach(app.geoResolver::lookup)
+                }
                 applyData(app, hours, enrichment, appRows, countryShares, rows)
             }
         }

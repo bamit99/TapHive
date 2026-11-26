@@ -1,6 +1,14 @@
 # Changelog
 
-All notable changes to TapHive are recorded here. v1.1.1 is release-signed; the v1.1 core was device-verified on Android 16. The v1.1.1 change is UI-only and was build/unit-test verified while the test device was offline.
+All notable changes to TapHive are recorded here. v1.1.2 is release-signed; the v1.1 core was device-verified on Android 16. The v1.1.1/v1.1.2 changes are build/unit-test verified while the test device was offline.
+
+## [1.1.2] — Country backfill and retry
+
+- Existing unresolved destination IPs are looked up when external enrichment is enabled and TRAFFIC opens.
+- Failed/rate-limited lookups now retry after five minutes instead of being suppressed for six hours.
+- Rejected enrichment queue entries are retried instead of being silently skipped.
+- Added an on-device test for the unresolved-IP query.
+- No syslog schema changes.
 
 ## [1.1.1] — Country-state clarity
 

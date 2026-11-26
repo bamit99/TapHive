@@ -31,6 +31,7 @@ class IpGeoResolver(
         private const val TIMEOUT_MS = 5000
         private const val MIN_INTERVAL_MS = 1500L
         private const val TTL_MS = 6 * 60 * 60 * 1000L
+        private const val RETRY_AFTER_MS = 5 * 60 * 1000L
         private const val MAX_BODY_BYTES = 64 * 1024
         private const val MAX_CACHE = 2048
         private const val LOCAL_LABEL = "LOCAL"
@@ -42,7 +43,14 @@ class IpGeoResolver(
     @Volatile
     var network: Network? = null
 
-    private val attemptedAt = Collections.synchronizedMap(
+    private val resolvedAt = Collections.synchronizedMap(
+        object : LinkedHashMap<String, Long>(256, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean =
+                size > MAX_CACHE
+        }
+    )
+
+    private val retryAt = Collections.synchronizedMap(
         object : LinkedHashMap<String, Long>(256, 0.75f, true) {
             override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Long>?): Boolean =
                 size > MAX_CACHE
@@ -72,13 +80,15 @@ class IpGeoResolver(
             return
         }
         val now = System.currentTimeMillis()
-        val last = attemptedAt[ip] ?: 0L
-        if (now - last < TTL_MS) return
-        attemptedAt[ip] = now
+        val resolved = resolvedAt[ip] ?: 0L
+        if (now - resolved < TTL_MS) return
+        if (now < (retryAt[ip] ?: 0L)) return
         try {
             executor.execute { resolve(ip) }
         } catch (_: RejectedExecutionException) {
-            // Bounded queue is full; leave this destination unenriched.
+            // Bounded queue is full; retry after a short delay rather than
+            // suppressing this IP for the full success TTL.
+            retryAt[ip] = now + RETRY_AFTER_MS
         }
     }
 
@@ -90,7 +100,12 @@ class IpGeoResolver(
                 nextRequestMs = max(nextRequestMs, System.currentTimeMillis() + result.delayMs)
             }
             val json = JSONObject(result.body)
-            if (!json.optBoolean("success", false)) return
+            if (!json.optBoolean("success", false)) {
+                // The provider has no record for this address; do not hammer it.
+                resolvedAt[ip] = System.currentTimeMillis()
+                retryAt.remove(ip)
+                return
+            }
             val country = json.optString("country").ifBlank { null }
             val connection = json.optJSONObject("connection")
             val org = connection?.let {
@@ -100,9 +115,15 @@ class IpGeoResolver(
             }
             if (country != null || org != null) {
                 database.upsertGeo(ip, country, org)
+                resolvedAt[ip] = System.currentTimeMillis()
+                retryAt.remove(ip)
+            } else {
+                retryAt[ip] = System.currentTimeMillis() + RETRY_AFTER_MS
             }
         } catch (_: Exception) {
-            // Offline, rate-limited or a non-public IP: keep the raw IP.
+            // Offline, rate-limited or a timed-out lookup: retry later instead
+            // of hiding the country for the full success TTL.
+            retryAt[ip] = System.currentTimeMillis() + RETRY_AFTER_MS
         }
     }
 

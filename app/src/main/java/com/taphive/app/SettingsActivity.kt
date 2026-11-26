@@ -111,6 +111,9 @@ class SettingsActivity : Activity() {
                 appName.text.toString(),
                 formatValues[formatIndex]
             )
+            if (prefs.enrichmentEnabled) {
+                app.database.unresolvedIps(50).forEach(app.geoResolver::lookup)
+            }
             Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
             finish()
         }

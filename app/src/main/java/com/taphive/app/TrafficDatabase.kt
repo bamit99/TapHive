@@ -204,6 +204,21 @@ class TrafficDatabase(
         return rows
     }
 
+    /** Public/local destination IPs with no country metadata yet. */
+    fun unresolvedIps(limit: Int): List<String> {
+        val rows = ArrayList<String>()
+        readableDatabase.rawQuery(
+            "SELECT f.ip, SUM(f.bytes) AS total FROM flows f " +
+                "LEFT JOIN ip_meta m ON m.ip = f.ip " +
+                "WHERE m.country IS NULL OR m.country = '' " +
+                "GROUP BY f.ip ORDER BY total DESC LIMIT ?",
+            arrayOf(limit.coerceIn(1, 100).toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) rows.add(cursor.getString(0))
+        }
+        return rows
+    }
+
     fun topDestinations(limit: Int): List<DestinationRow> {
         val rows = ArrayList<DestinationRow>()
         readableDatabase.rawQuery(
