@@ -11,13 +11,10 @@ import java.net.PortUnreachableException
 import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
-import java.text.SimpleDateFormat
 import javax.net.ssl.SSLException
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
-import java.util.Date
-import java.util.Locale
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
@@ -164,32 +161,16 @@ class SyslogSender(private val prefs: Prefs) {
         }
     }
 
-    private fun format(event: SyslogEvent): String {
-        val severity = if (event.event.startsWith("capture_")) 5 else 6
-        val pri = prefs.facility * 8 + severity
-        val timestamp = SimpleDateFormat("MMM dd HH:mm:ss", Locale.US).format(Date())
-        val host = Build.MODEL.replace(Regex("[^A-Za-z0-9_.-]"), "_")
-        val app = prefs.appName.replace(Regex("[^A-Za-z0-9_.-]"), "_")
-        val json = if (event.event.startsWith("capture_")) {
-            event.copy(
-                droppedEvents = dropped.get(),
-                // Snapshot at send time so queued flow-close events are included.
-                eventsForwarded = if (event.event == "capture_stop") forwarded.get() else event.eventsForwarded
-            ).toJson()
-        } else {
-            event.toJson()
-        }
-        if (prefs.syslogFormat == "rfc5424") {
-            // <PRI>VERSION TIMESTAMP HOSTNAME APP-NAME PROCID MSGID STRUCTURED-DATA MSG
-            // Structured data is the NILVALUE; all fields stay in the versioned JSON MSG.
-            val pid = Process.myPid().toString()
-            val msgId = event.event.replace(Regex("[^A-Za-z0-9_.-]"), "_").take(32).ifEmpty { "-" }
-            return "<$pri>1 ${UTC_MILLIS.format(event.timestamp)} " +
-                "${host.take(255).ifEmpty { "-" }} ${app.take(48).ifEmpty { "-" }} " +
-                "$pid $msgId - $json"
-        }
-        return "<$pri>$timestamp $host $app[${Process.myPid()}]: $json"
-    }
+    private fun format(event: SyslogEvent): String = SyslogFormatter.format(
+        event = event,
+        facility = prefs.facility,
+        appName = prefs.appName,
+        host = Build.MODEL,
+        pid = Process.myPid(),
+        format = prefs.syslogFormat,
+        dropped = dropped.get(),
+        forwarded = forwarded.get()
+    )
 
     private fun send(message: String) {
         val now = System.currentTimeMillis()

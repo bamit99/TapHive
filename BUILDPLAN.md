@@ -1,5 +1,7 @@
 # TapHive — Phased Build Plan
 
+> **v1.1 implementation status:** This document began as a Phase 0–8 target-state plan. The shipped v1.1 app is broader than the original Phase 1 slice: it includes RFC 5424, local history, UID labels, plaintext-DNS enrichment, optional HTTPS country/org lookup, TLS syslog, and Android 16 back handling. Treat the “Phase 1” sections below as historical scope, not as the current shipped behavior. Current behavior, build instructions, privacy notes, and known limitations are in [`README.md`](README.md), [`CHANGELOG.md`](CHANGELOG.md), and [`docs/SIEM.md`](docs/SIEM.md). The actual `targetSdk`/`compileSdk` is **36**, not 37.
+
 Original implementation, clean-room. This document is a **behaviour-only specification**. Implement from this document alone:
 
 - Do not copy code, strings, layouts, icons, UI text, resource names, identifiers, settings keys or API shapes from any prior implementation.
@@ -16,7 +18,7 @@ On-device packet capture for Android **without root**: local-only VPN that aggre
 
 ## 2. Platform requirements
 
-- minSdk **32** (Android 13), targetSdk/compile **37**; phone + tablet; multi-user/work-profile aware.
+- minSdk **32** (Android 13), targetSdk/compile **36**; phone + tablet; multi-user/work-profile aware.
 - No billing, no SKUs, no license servers — everything free.
 - Dependencies policy: only permissive licenses (Apache-2 / BSD / MIT / zlib) and clean original code — own native core (§8), own packet engine, own protocol detection, own disseminators, own pcapng writer; zstd + zlib libs stay as-is where possible. GPL/LGPL/viral native libraries may not link into the app binary without an explicit Phase 0 decision (§4, §12).
 - Data sources: GeoLite2 country/ASN in MaxMind-DB format. Licensing is the **GeoLite End User Agreement incorporating CC BY-SA 4.0** — not plain CC BY — which requires attribution ("This product includes GeoLite Data created by MaxMind, available from maxmind.com"), a MaxMind account + licence key for downloads, keeping data current and destroying old copies, and prohibits using the data to locate individuals. Verify the current EULA before bundling (last checked 2026-11-20); if these obligations are unacceptable, choose a different source before Phase 2.

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to TapHive are recorded here. v1.1 is in progress; the app version is not bumped until the release is validated.
+All notable changes to TapHive are recorded here. v1.1 is release-signed and device-verified on Android 16; see remaining risks below.
 
 ## [Unreleased] — v1.1 hardening
 
@@ -36,19 +36,34 @@ All notable changes to TapHive are recorded here. v1.1 is in progress; the app v
 - “Flows” counts now use distinct flow ids instead of counting 10-second sample rows.
 - Device-verified migration from the existing v1 database (`user_version=2`, history preserved) and TRAFFIC rendering.
 
+### Release
+- Bumped to `versionName 1.1`, `versionCode 2`.
+- Added a gitignored release signing configuration; the release build is minified, release-signed, and non-debuggable.
+- Device-verified a clean release install: VPN consent, capture start, and main-screen rendering.
+- Removed the two public traffic screenshots containing real usage/destination data.
+
 ### Tests
 - Added JUnit tests for IPv4/IPv6 parsing, fragment rejection, flow-key symmetry, DNS A-record parsing, truncated responses, query rejection, and 5,000-iteration DNS fuzz input.
-- Current result: **11 tests, 0 failures** (`testDebugUnitTest`).
+- Added RFC 3164/5424 formatter tests and two on-device database tests for distinct-flow counting and retention-off cleanup.
+- Current result: **14 JVM tests + 2 instrumentation tests, 0 failures**.
 
 ### Documentation
-- Added the v1.1 audit report (kept local while pre-fix findings are not public).
-- README and BUILDPLAN updates are pending the remaining security/transport work.
+- Updated README for v1.1 behavior, release signing, TLS/enrichment consent, privacy claims, and known limitations.
+- Added `docs/SIEM.md` with Splunk, Elastic/Logstash, and Sentinel examples and field mappings.
+- Added a v1.1 status note to BUILDPLAN.
+
+### Documentation
+- Updated README for v1.1 behavior, release signing, TLS/enrichment consent, privacy claims, and known limitations.
+- Added `docs/SIEM.md` with Splunk, Elastic/Logstash, and Sentinel examples and field mappings.
+- Added a v1.1 status note to BUILDPLAN.
+- Added the v1.1 audit report locally; it is not published while pre-fix findings and residual risks are being reviewed.
 
 ### Outstanding
 - TLS syslog has been verified failing closed against a self-signed listener; a successful TLS session against a system-trusted collector still needs a lab endpoint.
 - TLS pinning/mTLS is not implemented; TLS uses the platform trust store only.
-- Release signing is not configured; the published v1.0 APK is debuggable/debug-signed.
-- TCP retransmission/half-close handling remains simplified; IPv6 forwarding remains deferred.
-- History is still plaintext at rest inside the app sandbox (backup/device-transfer excluded).
-- Public screenshots still contain real usage data and must be replaced with demo data.
-- v1.1 version bump and signed release APK are pending validation.
+- TCP retransmission/half-close handling remains simplified.
+- IPv6 forwarding remains deferred; IPv6 traffic is not captured.
+- History is still plaintext at rest inside the app sandbox (backup/device transfer excluded).
+- Android 13–15 device coverage is still pending; v1.1 was verified on Android 16.
+- Traffic screenshots need to be regenerated from controlled demo data before restoring them to the gallery.
+- Release keystore/password must be backed up outside the repo; losing them prevents upgrades.

@@ -15,8 +15,9 @@ import android.database.sqlite.SQLiteOpenHelper
  */
 class TrafficDatabase(
     context: Context,
-    private val prefs: Prefs
-) : SQLiteOpenHelper(context.applicationContext, DB_NAME, null, DB_VERSION) {
+    private val prefs: Prefs,
+    dbName: String = DB_NAME
+) : SQLiteOpenHelper(context.applicationContext, dbName, null, DB_VERSION) {
 
     data class DestinationRow(
         val ip: String,

@@ -2,48 +2,44 @@
 
 TapHive is a clean-room Android app that captures **network flow metadata** on a local VPN interface and forwards it as structured **RFC 3164 or RFC 5424 JSON syslog events**. It also keeps a configurable local history with per-app and destination enrichment.
 
-> **v1.0 status:** device-verified on Android 16. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
+> **v1.1 status:** release-signed, device-verified on Android 16, and hardened incrementally from v1.0. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
 
-**Prebuilt APK:** [`TapHive-1.0.apk`](https://github.com/bamit99/TapHive/releases/download/v1.0/TapHive-1.0.apk) (debug-signed).
+**Prebuilt APK:** [`TapHive-1.1.apk`](https://github.com/bamit99/TapHive/releases/download/v1.1/TapHive-1.1.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
 
 ## Highlights
 
 - Local `VpnService` with IPv4 split routes, transparent TCP/UDP forwarding, and a persistent foreground notification. IPv6 routing is deferred until the forwarder supports it.
 - Pure Kotlin `PacketReader` over the VPN fd: IPv4/IPv6 headers, TCP/UDP/SCTP ports, canonical flow keys, 30-second idle expiry. With IPv6 routes removed, live capture currently sees IPv4 only.
 - Numeric UID attribution through `ConnectivityManager.getConnectionOwnerUid`; UID labels come from `PackageManager` without `QUERY_ALL_PACKAGES`. Unknown/negative UIDs are shown as `MISC`.
-- Syslog forwarding over UDP or TCP, disabled by default, with facility/severity settings, bounded queue, rate limiting, reconnect backoff, and a choice of RFC 3164 or RFC 5424 framing.
-- Syslog and enrichment sockets are bound to the underlying Wi-Fi/cellular/Ethernet network so they never loop back into TapHive's own tunnel. Captured TCP/UDP traffic is relayed through protected sockets on that network and rewritten back into the tun, so device connectivity is preserved.
+- Syslog forwarding over UDP, TCP, or TLS, disabled by default, with facility/severity settings, bounded queue, rate limiting, reconnect backoff, and a choice of RFC 3164 or RFC 5424 framing.
+- TLS syslog uses the platform trust store and hostname verification; a TLS failure is surfaced as a certificate error and never silently downgrades to plaintext.
+- External destination enrichment is explicit opt-in (default off), uses HTTPS (`ipwho.is`), and sends only the public destination IP. On-device DNS names remain local.
+- Syslog and enrichment sockets are bound to the current non-VPN default network so they never loop back into TapHive's own tunnel. Captured TCP/UDP traffic is relayed through protected sockets on that network and rewritten back into the tun, so device connectivity is preserved.
 - Main screen shows the active syslog format and a target-health indicator: green only with proof (`TCP` connect), yellow for normal/unconfirmed UDP or stale traffic, red for hard errors, dim when forwarding is disabled.
 - Retained local history in SQLite with retention `Off / 1 hour / 6 hours / 24 hours / 7 days` (default `24 hours`), plus a **Clear history** action.
 - TRAFFIC view backed by retained history: pie charts by application and country, top applications, and top destinations grouped by IP/port/protocol/UID.
-- Destination labels combine on-device DNS answers with ip-api `org`/`isp`/`as` metadata. DNS is best-effort; the organisation label is the fallback when no name was observed.
+- Destination labels combine on-device DNS answers with optional HTTPS `ipwho.is` country/organisation metadata. DNS is best-effort; the organisation label is the fallback when no name was observed.
 - Capture resumes after process death when it was left running. Boot resume is opt-in and requires both **Start capture at boot** and capture previously left running.
-- No third-party runtime dependencies; only the Android Gradle plugin and Kotlin plugin are used at build time.
+- Android 12+ data-extraction rules exclude the history DB and preferences from cloud backup and device transfer; legacy full backup is disabled.
+- SQLite uses a non-destructive v2 migration, WAL, and indexes; history writes are queued off the packet thread and TRAFFIC queries run off the UI thread.
+- No third-party runtime dependencies; JUnit/AndroidX test libraries are test-only.
 
 ## Screenshots
 
 <table>
   <tr>
     <td><img src="docs/screenshots/01-main.png" width="240" alt="Main screen"></td>
-    <td><img src="docs/screenshots/02-traffic-applications.png" width="240" alt="Traffic by application"></td>
-    <td><img src="docs/screenshots/03-traffic-destinations.png" width="240" alt="Top destinations"></td>
+    <td><img src="docs/screenshots/04-syslog-target.png" width="240" alt="Syslog target settings"></td>
+    <td><img src="docs/screenshots/05-about.png" width="240" alt="About screen"></td>
   </tr>
   <tr>
     <td align="center">Main</td>
-    <td align="center">Traffic by application</td>
-    <td align="center">Top destinations</td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshots/04-syslog-target.png" width="240" alt="Syslog target settings"></td>
-    <td><img src="docs/screenshots/05-about.png" width="240" alt="About screen"></td>
-    <td></td>
-  </tr>
-  <tr>
     <td align="center">Syslog target</td>
     <td align="center">About</td>
-    <td></td>
   </tr>
 </table>
+
+Traffic screenshots are intentionally omitted from the public repository because they contain real app/destination usage data. They can be regenerated from controlled demo data.
 
 ## Architecture
 
@@ -58,7 +54,7 @@ VpnService tun fd
     │        ├──► UidResolver ──► AppNameResolver
     │        ├──► TrafficDatabase (retained flows + ip_meta)
     │        ├──► DnsNameParser (port 53 A/AAAA answers)
-    │        └──► IpGeoResolver (ip-api country/org/isp/as)
+    │        └──► IpGeoResolver (optional HTTPS country/org/isp/as)
     │
     └──► Ipv4TunnelForwarder ──► protected TCP/UDP sockets ──► underlying network
              └──► rewritten replies written back to the tun fd
@@ -82,7 +78,7 @@ app/src/main/java/com/taphive/app/
 ├── UidResolver.kt       # numeric uid attribution
 ├── AppNameResolver.kt   # UID -> package/app label
 ├── DnsNameParser.kt     # A/AAAA answers from DNS responses
-├── IpGeoResolver.kt     # country/org enrichment via ip-api
+├── IpGeoResolver.kt     # optional HTTPS country/org enrichment
 ├── TrafficDatabase.kt   # retained flow history + IP metadata
 ├── TrafficTracker.kt    # live flow aggregation
 ├── SyslogSender.kt      # RFC 3164/5424 formatter, queue, sockets
@@ -102,9 +98,9 @@ app/src/main/java/com/taphive/app/
 - Pruning runs at startup, on writes (throttled), and when settings are saved. **CLEAR HISTORY** removes flows and cached IP metadata.
 - `TrafficDatabase` keeps an `ip_meta` cache with country, organisation, DNS name, and update time.
 - DNS names are parsed locally from A/AAAA answers seen in plaintext DNS responses on port 53. DNS-over-HTTPS/TLS bypasses this and will not produce a name.
-- Public destination IPs are enriched through `ip-api.com` using `country,org,isp,as`; the first non-empty organisation field becomes the fallback label. The free tier is HTTP-only, so cleartext is permitted for `ip-api.com` alone in `network_security_config.xml`.
-- Private, loopback, link-local, CGNAT, and RFC 1918 addresses are labelled `LOCAL` and are not sent to ip-api.
-- Lookup attempts are rate-limited for the free tier, and results are cached in `ip_meta` for 30 days.
+- External enrichment is opt-in and off by default. When enabled, public destination IPs are sent over HTTPS to `ipwho.is`; UID, ports, DNS names, and local history are not sent.
+- Private, loopback, link-local, CGNAT, and RFC 1918 addresses are labelled `LOCAL` and are not sent to the provider.
+- Lookup attempts are rate-limited and cached. When local history is Off, `ip_meta` is cleared and DNS/geo persistence is skipped.
 
 ## Main-screen target status
 
@@ -112,7 +108,7 @@ The main card shows `FORMAT · RFC 3164` or `FORMAT · RFC 5424`, plus a coloure
 
 | State | Meaning |
 | --- | --- |
-| Green — `LISTENER CONFIRMED · TCP` | A TCP connection succeeded. This is the only positive listener proof available. |
+| Green — `LISTENER CONFIRMED · TCP` | A TCP connection (or TLS handshake, for the TLS transport) succeeded. This is the only positive listener proof available. |
 | Yellow — `UDP SENT · CHECK SYSLOG SERVER` | UDP datagrams were sent, but UDP has no acknowledgement. |
 | Yellow — `NO RECENT PACKETS · CHECK SERVER` | No successful send within the last 60 seconds. |
 | Red — `CHECK SERVER / PORT` | DNS failure, TCP refusal/timeout, ICMP port-unreachable, or repeated send backoff. |
@@ -218,25 +214,42 @@ Create `local.properties` in the project root (it is gitignored):
 sdk.dir=/path/to/your/Android/sdk
 ```
 
-Then build:
+Then build and test:
 
 ```sh
 ./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest
+./gradlew :app:connectedDebugAndroidTest   # requires a connected device
 ```
 
-The APK is written to:
+Debug APK:
 
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Version metadata is `versionName 1.0`, `versionCode 1`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
+Release signing is intentionally not committed. Add these gitignored `local.properties` keys and keep the keystore outside the repo:
+
+```properties
+taphive.storeFile=/absolute/path/to/taphive-release.jks
+taphive.storePassword=...
+taphive.keyAlias=taphive
+taphive.keyPassword=...
+```
+
+Then:
+
+```sh
+./gradlew :app:assembleRelease
+```
+
+The signed release APK is `app/build/outputs/apk/release/app-release.apk`. Version metadata is `versionName 1.1`, `versionCode 2`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
 
 ## Install and configure
 
 ```sh
 adb connect <device-ip>:<adb-port>
-adb -s <device-ip>:<adb-port> install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s <device-ip>:<adb-port> install -r app/build/outputs/apk/release/app-release.apk
 adb -s <device-ip>:<adb-port> shell am start -n com.taphive.app/.MainActivity
 ```
 
@@ -244,10 +257,11 @@ In the app:
 
 1. Open **SYSLOG TARGET**.
 2. Enable **syslog forwarding**.
-3. Set host, port, facility, transport (`UDP`/`TCP`), RFC format (`RFC 3164`/`RFC 5424`), and application name.
+3. Set host, port, facility, transport (`UDP`/`TCP`/`TLS`), RFC format (`RFC 3164`/`RFC 5424`), and application name.
 4. Choose local history retention or disable it.
-5. Save.
-6. Tap **START CAPTURE** and grant the VPN consent prompt.
+5. Optionally enable **External IP enrichment (HTTPS)**; leave it off for no third-party lookups.
+6. Save.
+7. Tap **START CAPTURE** and grant the VPN consent prompt.
 
 The status card should show `CAPTURE LIVE`, the configured target, the selected `FORMAT`, and a target-health indicator.
 
@@ -271,21 +285,24 @@ with open("taphive-syslog.log", "ab", buffering=0) as out:
 Verified on a CPH2585 phone and SM-P615 tablet running Android 16 (API 36):
 
 - RFC 3164 and RFC 5424 lines received over UDP and TCP.
+- TLS syslog failed closed against a self-signed listener with `TLS HANDSHAKE FAILED · CHECK CERTIFICATE`; no plaintext fallback.
+- HTTPS enrichment produced country/org rows for public destinations when explicitly enabled.
 - `flow_open`/`flow_close` correlation by `th_session_id` + `th_flow_id`.
 - TCP listener → green; closed TCP port → red; UDP port-unreachable → red; normal UDP → yellow.
+- Android 16 back showed the exit dialog; TRAFFIC back routing and navigation were checked.
+- SQLite migrated an existing v1 database to v2 with history preserved.
 - Force-stop and relaunch resumed capture when it was left running.
-- Opt-in boot resume, local history retention, top applications, and top destinations.
-- Main-screen format and target-health states.
+- 14 JVM tests and 2 instrumentation tests passed; release APK verified signed and non-debuggable.
 
 ## Privacy and permissions
 
 **Collected locally:** IP endpoints, IP version, protocol, ports, numeric UID, byte/packet counters, timestamps, flow status, DNS names observed on port 53, and country/organisation labels.
 
-**Sent externally:** public destination IPs are sent to `ip-api.com` over HTTP to obtain country/org/isp/as. The configured syslog receiver receives the metadata events. No API key is used.
+**Sent externally:** only when the user enables external enrichment, public destination IPs are sent over HTTPS to `ipwho.is` to obtain country/org/isp/as. The provider can see the device's source IP. The configured syslog receiver receives metadata events; choose TLS for an authenticated, encrypted transport. No API key is used.
 
-**Not collected:** packet payloads, URLs, HTTP bodies, TLS secrets, or device identifiers beyond the RFC 3164/5424 host field. App labels and enrichment are local and are not added to syslog.
+**Not collected:** packet payloads, URLs, HTTP bodies, TLS secrets, or device identifiers beyond the RFC 3164/5424 host field. App labels, DNS names, and enrichment labels are local and are not added to syslog.
 
-**Not backed up:** `android:allowBackup="false"` keeps local history off Android cloud backup.
+**Not backed up:** `android:allowBackup="false"` plus `dataExtractionRules` excludes the history database and preferences from cloud backup and device transfer. History is still plaintext inside the app's private sandbox.
 
 Permissions declared:
 
@@ -297,13 +314,13 @@ Permissions declared:
 
 No `QUERY_ALL_PACKAGES`; package visibility is limited to launcher `MAIN`/`LAUNCHER` queries for UID label resolution.
 
-Syslog and ip-api traffic are cleartext. Use a trusted receiver/network; TLS syslog is deferred.
+UDP/TCP syslog are cleartext by design and should only be used on a trusted network. TLS syslog uses the platform trust store and hostname verification; certificate pinning and mTLS are not implemented. External enrichment is HTTPS.
 
 ## Scope and roadmap
 
 Current release: metadata capture → retained local history/enrichment → RFC 3164/5424 syslog → SIEM.
 
-Deferred: IPv6 forwarding, pcap/pcapng export, TLS syslog, firewall controls, companion addon, backup/restore, and L7/HTTP inspection. DNS names are only visible for plaintext DNS on port 53; DoH/DoT remains opaque to the app.
+Deferred or incomplete: IPv6 forwarding, full TCP retransmission/out-of-order reassembly, TLS pinning/mTLS, history encryption at rest, pcap/pcapng export, firewall controls, companion addon, backup/restore, and L7/HTTP inspection. DNS names are only visible for plaintext DNS on port 53; DoH/DoT remains opaque to the app. See [`CHANGELOG.md`](CHANGELOG.md) and [`docs/SIEM.md`](docs/SIEM.md).
 
 ## License
 
