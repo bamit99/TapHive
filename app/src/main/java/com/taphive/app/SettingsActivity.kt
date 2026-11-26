@@ -1,6 +1,7 @@
 package com.taphive.app
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -15,19 +16,35 @@ class SettingsActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
 
-        val prefs = (application as TapHiveApp).prefs
+        val app = application as TapHiveApp
+        val prefs = app.prefs
         val enabled = findViewById<CheckBox>(R.id.syslog_enabled)
         val host = findViewById<EditText>(R.id.syslog_host)
         val port = findViewById<EditText>(R.id.syslog_port)
         val transport = findViewById<Spinner>(R.id.syslog_transport)
         val facility = findViewById<EditText>(R.id.syslog_facility)
         val appName = findViewById<EditText>(R.id.syslog_app_name)
+        val startAtBoot = findViewById<CheckBox>(R.id.start_at_boot)
+        val retention = findViewById<Spinner>(R.id.retention)
         val error = findViewById<TextView>(R.id.error)
+
+        findViewById<Button>(R.id.back).setOnClickListener { finish() }
+        findViewById<Button>(R.id.info).setOnClickListener {
+            startActivity(Intent(this, AboutActivity::class.java))
+        }
 
         transport.adapter = ArrayAdapter(
             this,
             android.R.layout.simple_spinner_item,
             arrayOf("udp", "tcp")
+        ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+
+        val retentionLabels = arrayOf("Off", "1 hour", "6 hours", "24 hours", "7 days")
+        val retentionHours = intArrayOf(0, 1, 6, 24, 168)
+        retention.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_item,
+            retentionLabels
         ).also { it.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
         enabled.isChecked = prefs.enabled
@@ -36,6 +53,15 @@ class SettingsActivity : Activity() {
         transport.setSelection(if (prefs.transport == "tcp") 1 else 0)
         facility.setText(prefs.facility.toString())
         appName.setText(prefs.appName)
+        startAtBoot.isChecked = prefs.startAtBoot
+        retention.setSelection(
+            retentionHours.indexOf(prefs.retentionHours).coerceAtLeast(0)
+        )
+
+        findViewById<Button>(R.id.clear_history).setOnClickListener {
+            app.database.clear()
+            Toast.makeText(this, "History cleared", Toast.LENGTH_SHORT).show()
+        }
 
         findViewById<Button>(R.id.save).setOnClickListener {
             val portValue = port.text.toString().toIntOrNull()
@@ -51,6 +77,9 @@ class SettingsActivity : Activity() {
                     return@setOnClickListener
                 }
             }
+            prefs.setStartAtBoot(startAtBoot.isChecked)
+            prefs.saveRetention(retentionHours[retention.selectedItemPosition])
+            app.database.prune()
             prefs.save(
                 enabled.isChecked,
                 host.text.toString(),

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Hive cell: hexagonal shell -->
+    <path
+        android:pathData="M54,24 L80,39 L80,69 L54,84 L28,69 L28,39 Z"
+        android:fillColor="#070A12"
+        android:fillAlpha="0.55"
+        android:strokeColor="#00E5FF"
+        android:strokeWidth="3.5"
+        android:strokeLineJoin="round" />
+
+    <!-- Inner cell -->
+    <path
+        android:pathData="M54,36 L70,45 L70,63 L54,72 L38,63 L38,45 Z"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#8BF6FF"
+        android:strokeWidth="2"
+        android:strokeLineJoin="round" />
+
+    <!-- Tap ripple -->
+    <path
+        android:pathData="M54,40 A14,14 0 1,1 54,68 A14,14 0 1,1 54,40 Z"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#00E5FF"
+        android:strokeAlpha="0.85"
+        android:strokeWidth="1.6" />
+    <path
+        android:pathData="M54,46 A8,8 0 1,1 54,62 A8,8 0 1,1 54,46 Z"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#8BF6FF"
+        android:strokeWidth="1.4" />
+    <path
+        android:pathData="M54,50 A4,4 0 1,1 54,58 A4,4 0 1,1 54,50 Z"
+        android:fillColor="#FF2D95" />
+</vector>

@@ -36,7 +36,8 @@ class Ipv4TunnelForwarder(
     private val network: Network?,
     private val tun: TunWriter,
     private val onInbound: (IpPacket, Int) -> Unit,
-    private val localIp: String = "10.0.0.2"
+    private val localIp: String = "10.0.0.2",
+    private val onUdpPayload: (Int, ByteArray, Int) -> Unit = { _, _, _ -> }
 ) : TunnelForwarder {
 
     private data class SessionKey(
@@ -85,6 +86,7 @@ class Ipv4TunnelForwarder(
                     val packet = DatagramPacket(buffer, buffer.size)
                     socket.receive(packet)
                     val payload = packet.data.copyOfRange(packet.offset, packet.offset + packet.length)
+                    onUdpPayload(key.remotePort, payload, payload.size)
                     val reply = IpPacket(
                         protocol = 17,
                         src = endpointOf(this@UdpSession.packet.dst.ip, this@UdpSession.packet.dst.port),

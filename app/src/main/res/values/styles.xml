@@ -44,6 +44,17 @@
         <item name="android:shadowRadius">8</item>
     </style>
 
+    <style name="NeonSmallButton">
+        <item name="android:textColor">@color/neon_cyan_soft</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:minHeight">36dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+    </style>
+
     <style name="NeonField">
         <item name="android:textColor">@color/neon_text</item>
         <item name="android:textColorHint">@color/neon_muted</item>

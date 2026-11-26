@@ -45,6 +45,9 @@ class PacketReader(
             packetsReceived: Long,
             status: String
         )
+
+        /** Incremental byte delta for local history, including still-open flows. */
+        fun onFlowBytes(flowId: Long, timestampMs: Long, bytesDelta: Long)
     }
 
     private class Flow(
@@ -60,6 +63,7 @@ class PacketReader(
         var packetsSent: Long = 0
         var packetsReceived: Long = 0
         var lastSeen: Long = openedAt
+        var sampledBytes: Long = 0
     }
 
     private val capturedPackets = AtomicLong(0)
@@ -71,6 +75,7 @@ class PacketReader(
     private var nextFlowId = 0L
     private var input: FileInputStream? = null
     private var thread: Thread? = null
+    private var lastSampleMs = 0L
     private val running = java.util.concurrent.atomic.AtomicBoolean(false)
 
     fun start() {
@@ -128,6 +133,10 @@ class PacketReader(
                     handle(packet, count.toLong(), now)
                     forwarder?.forward(packet, buffer, count)
                 }
+                if (now - lastSampleMs >= SAMPLE_INTERVAL_MS) {
+                    sampleFlows(now)
+                    lastSampleMs = now
+                }
                 expire(now, false)
             }
         } finally {
@@ -175,11 +184,29 @@ class PacketReader(
         return flow
     }
 
+    /** Feeds local history with deltas from flows that are still open. */
+    private fun sampleFlows(now: Long) {
+        for (flow in flows.values) {
+            val total = flow.bytesSent + flow.bytesReceived
+            val delta = total - flow.sampledBytes
+            if (delta > 0) {
+                flow.sampledBytes = total
+                safeEmit { sink.onFlowBytes(flow.id, now, delta) }
+            }
+        }
+    }
+
     private fun expire(now: Long, force: Boolean) {
         val iterator = flows.values.iterator()
         while (iterator.hasNext()) {
             val flow = iterator.next()
             if (!force && now - flow.lastSeen < IDLE_TIMEOUT_MS) continue
+            val total = flow.bytesSent + flow.bytesReceived
+            val pending = total - flow.sampledBytes
+            if (pending > 0) {
+                flow.sampledBytes = total
+                safeEmit { sink.onFlowBytes(flow.id, now, pending) }
+            }
             safeEmit {
                 sink.onFlowClose(
                     flow.id,
@@ -283,6 +310,7 @@ class PacketReader(
     private companion object {
         const val BUFFER_SIZE = 65535
         const val IDLE_TIMEOUT_MS = 30_000L
+        const val SAMPLE_INTERVAL_MS = 10_000L
         const val JOIN_TIMEOUT_MS = 2_000L
         const val POLL_TIMEOUT_MS = 250
     }

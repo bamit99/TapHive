@@ -7,11 +7,30 @@ class TapHiveApp : Application() {
         private set
     lateinit var sender: SyslogSender
         private set
+    lateinit var tracker: TrafficTracker
+        private set
+    lateinit var database: TrafficDatabase
+        private set
+    lateinit var geoResolver: IpGeoResolver
+        private set
+    lateinit var appNameResolver: AppNameResolver
+        private set
 
     override fun onCreate() {
         super.onCreate()
         prefs = Prefs(this)
         sender = SyslogSender(prefs)
         sender.start()
+        database = TrafficDatabase(this, prefs)
+        database.prune()
+        tracker = TrafficTracker()
+        geoResolver = IpGeoResolver(this, database)
+        appNameResolver = AppNameResolver(this)
+
+        // Resume only when capture was explicitly left running. Boot is handled
+        // separately by BootReceiver, which also requires the user's opt-in.
+        if (prefs.captureWanted && !CaptureService.isRunning) {
+            CaptureService.start(this)
+        }
     }
 }

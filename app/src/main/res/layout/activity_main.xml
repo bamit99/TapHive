@@ -6,6 +6,26 @@
     android:orientation="vertical"
     android:padding="28dp">
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <Button
+            android:id="@+id/info"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/neon_button_ghost"
+            android:text="@string/info"
+            style="@style/NeonSmallButton" />
+    </LinearLayout>
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -72,7 +92,7 @@
     </LinearLayout>
 
     <Button
-        android:id="@+id/start"
+        android:id="@+id/capture_toggle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="28dp"
@@ -81,12 +101,12 @@
         style="@style/NeonButton" />
 
     <Button
-        android:id="@+id/stop"
+        android:id="@+id/traffic"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:background="@drawable/neon_button_magenta"
-        android:text="@string/stop_capture"
+        android:background="@drawable/neon_button_ghost"
+        android:text="@string/view_traffic"
         style="@style/NeonButton" />
 
     <Button

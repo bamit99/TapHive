@@ -10,6 +10,34 @@
         android:orientation="vertical"
         android:padding="28dp">
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/back"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/neon_button_ghost"
+                android:text="@string/back"
+                style="@style/NeonSmallButton" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/info"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/neon_button_ghost"
+                android:text="@string/info"
+                style="@style/NeonSmallButton" />
+        </LinearLayout>
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -108,13 +136,74 @@
                 style="@style/NeonField" />
         </LinearLayout>
 
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/neon_card"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CAPTURE"
+                style="@style/NeonLabel" />
+
+            <CheckBox
+                android:id="@+id/start_at_boot"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:buttonTint="@color/neon_cyan"
+                android:text="Start capture at boot"
+                android:textColor="@color/neon_text" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="34dp"
+                android:text="Resumes only if capture was left running"
+                android:textColor="@color/neon_muted"
+                android:textSize="11sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/neon_card"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="LOCAL HISTORY"
+                style="@style/NeonLabel" />
+
+            <Spinner
+                android:id="@+id/retention"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/neon_field" />
+
+            <Button
+                android:id="@+id/clear_history"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/neon_button_cyan"
+                android:text="CLEAR HISTORY"
+                style="@style/NeonButton" />
+        </LinearLayout>
+
         <Button
             android:id="@+id/save"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:background="@drawable/neon_button_cyan"
-            android:text="SAVE TARGET"
+            android:text="SAVE SETTINGS"
             style="@style/NeonButton" />
 
         <TextView

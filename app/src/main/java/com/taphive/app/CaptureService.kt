@@ -8,7 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Network
-import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
 import android.os.IBinder
@@ -18,6 +17,7 @@ import java.util.UUID
 
 class CaptureService : VpnService(), PacketReader.FlowSink {
     private lateinit var uidResolver: UidResolver
+    private val dnsParser = DnsNameParser()
     private var pfd: ParcelFileDescriptor? = null
     private var reader: PacketReader? = null
     private var sessionId = ""
@@ -35,24 +35,40 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         if (intent?.action == VpnService.SERVICE_INTERFACE) super.onBind(intent) else null
 
     override fun onRevoke() {
+        app.prefs.setCaptureWanted(false)
+        starting = false
         releaseCapture(emitLifecycle = true)
         stopSelf()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> startCapture()
+            ACTION_START -> {
+                app.prefs.setCaptureWanted(true)
+                startCapture()
+            }
             ACTION_STOP -> stopCapture()
-            else -> stopSelf()
+            else -> {
+                // Null intent: the system recreated a killed service. Only resume
+                // when the user left capture explicitly enabled.
+                if (app.prefs.captureWanted) startCapture() else stopSelf()
+            }
         }
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     private fun startCapture() {
-        if (isRunning) return
+        if (isRunning || starting) return
+        starting = true
 
-        // Bind syslog traffic to the real network before the VPN becomes the default route.
-        app.sender.network = underlyingNetwork()
+        // startForegroundService() requires startForeground() promptly. Announce
+        // the service before VPN establishment, which can fail (e.g. after boot).
+        showForeground()
+
+        // Bind helper traffic to the real network before the VPN becomes the default route.
+        val underlying = underlyingNetwork()
+        app.sender.network = underlying
+        app.geoResolver.network = underlying
 
         // IPv6 routing is deferred until the forwarder handles IPv6; leaving these
         // routes installed without a forwarding path would blackhole IPv6 traffic.
@@ -66,35 +82,39 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
 
         val fd = try {
             builder.establish()
-        } catch (_: Exception) {
-            stopSelf()
-            return
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "VPN establish failed", e)
+            null
         }
         if (fd == null) {
+            android.util.Log.w(TAG, "VPN establish returned null")
+            notifyStartFailed()
+            starting = false
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
         }
 
         pfd = fd
         sessionId = UUID.randomUUID().toString()
+        app.tracker.reset()
         CaptureService.packetsCaptured = 0L
         app.sender.resetForwardedCount()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification(),
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, notification())
-        }
         isRunning = true
+        starting = false
         app.sender.enqueue(captureEvent("capture_start", includeTotals = true))
         val forwarder = Ipv4TunnelForwarder(
             vpn = this,
             network = app.sender.network,
             tun = TunWriter(fd.fileDescriptor),
-            onInbound = { packet, length -> reader?.recordInbound(packet, length) }
+            onInbound = { packet, length -> reader?.recordInbound(packet, length) },
+            onUdpPayload = { port, payload, length ->
+                if (port == 53) {
+                    dnsParser.parse(payload, length).forEach { (ip, name) ->
+                        app.database.upsertDnsName(ip, name)
+                    }
+                }
+            }
         )
         reader = PacketReader(fd, this, forwarder).also { it.start() }
     }
@@ -115,6 +135,10 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
     ) {
         val uid = uidResolver.resolve(protocol, srcIp, srcPort, dstIp, dstPort)
 
+        // The traffic view aggregates the same flow events the syslog path consumes.
+        app.tracker.addFlow(flowId, uid, dstIp, dstPort, protocol)
+        app.geoResolver.lookup(dstIp)
+
         app.sender.enqueue(
             SyslogEvent(
                 sessionId = sessionId,
@@ -132,6 +156,18 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         )
     }
 
+    override fun onFlowBytes(flowId: Long, timestampMs: Long, bytesDelta: Long) {
+        val flow = app.tracker.openFlow(flowId) ?: return
+        app.database.recordFlow(
+            ts = timestampMs,
+            uid = flow.uid,
+            ip = flow.dstIp,
+            port = flow.dstPort,
+            protocol = flow.protocol,
+            bytes = bytesDelta
+        )
+    }
+
     override fun onFlowClose(
         flowId: Long,
         timestampMs: Long,
@@ -141,6 +177,7 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         packetsReceived: Long,
         status: String
     ) {
+        app.tracker.closeFlow(flowId, bytesSent, bytesReceived, packetsSent, packetsReceived)
         app.sender.enqueue(
             SyslogEvent(
                 sessionId = sessionId,
@@ -156,20 +193,7 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         )
     }
 
-    private fun underlyingNetwork(): Network? {
-        val manager = getSystemService(ConnectivityManager::class.java)
-        return manager.allNetworks.firstOrNull { network ->
-            val caps = manager.getNetworkCapabilities(network)
-            caps != null &&
-                caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-                !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
-                (
-                    caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                        caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-                    )
-        }
-    }
+    private fun underlyingNetwork(): Network? = Networks.underlying(this)
 
     private fun captureEvent(name: String, includeTotals: Boolean = false) = SyslogEvent(
         sessionId = sessionId,
@@ -180,12 +204,55 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
 
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getString(R.string.channel_name),
-                NotificationManager.IMPORTANCE_LOW
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_ID,
+                    getString(R.string.channel_name),
+                    NotificationManager.IMPORTANCE_LOW
+                )
             )
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    ALERT_CHANNEL_ID,
+                    getString(R.string.alert_channel_name),
+                    NotificationManager.IMPORTANCE_DEFAULT
+                )
+            )
+        }
+    }
+
+    /** Auto-start after a reboot can fail if VPN approval was reset. */
+    private fun notifyStartFailed() {
+        val intent = Intent(this, MainActivity::class.java)
+        val pending = PendingIntent.getActivity(
+            this, 1, intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val notification = Notification.Builder(this, ALERT_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle(getString(R.string.capture_start_failed_title))
+            .setContentText(getString(R.string.capture_start_failed_text))
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .build()
+        val manager = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) return
+        manager.notify(ALERT_NOTIFICATION_ID, notification)
+    }
+
+    private fun showForeground() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification(),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification())
         }
     }
 
@@ -202,6 +269,8 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
     }
 
     private fun stopCapture() {
+        app.prefs.setCaptureWanted(false)
+        starting = false
         releaseCapture(emitLifecycle = true)
         stopSelf()
     }
@@ -231,13 +300,37 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
     }
 
     companion object {
+        private const val TAG = "TapHiveCapture"
         const val ACTION_START = "com.taphive.app.START"
         const val ACTION_STOP = "com.taphive.app.STOP"
         private const val CHANNEL_ID = "taphive_capture"
+        private const val ALERT_CHANNEL_ID = "taphive_alerts"
         private const val NOTIFICATION_ID = 1
+        private const val ALERT_NOTIFICATION_ID = 2
+
+        fun start(context: Context) {
+            val intent = Intent(context, CaptureService::class.java).setAction(ACTION_START)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (_: Exception) {
+                // Background start denied; the user can start it from the app.
+            }
+        }
+
+        fun stop(context: Context) {
+            context.startService(Intent(context, CaptureService::class.java).setAction(ACTION_STOP))
+        }
 
         @Volatile
         var isRunning = false
+            private set
+
+        @Volatile
+        var starting = false
             private set
 
         @Volatile
