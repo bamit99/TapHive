@@ -2,9 +2,9 @@
 
 TapHive is a clean-room Android app that captures **network flow metadata** on a local VPN interface and forwards it as structured **RFC 3164 or RFC 5424 JSON syslog events**. It also keeps a configurable local history with per-app and destination enrichment.
 
-> **v1.2.0 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.2.0 adds DNS diagnostics, per-IP drill-down and attribution. v1.2.0 device/instrumentation validation is pending while the test phone is offline. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
+> **v1.2.1 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.2.0 added DNS diagnostics, per-IP drill-down and attribution; v1.2.1 limits DNS diagnostics to plaintext UDP port 53. v1.2.1 device/instrumentation validation is pending while the test phone is offline. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
 
-**Prebuilt APK:** [`TapHive-1.2.0.apk`](https://github.com/bamit99/TapHive/releases/download/v1.2.0/TapHive-1.2.0.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
+**Prebuilt APK:** [`TapHive-1.2.1.apk`](https://github.com/bamit99/TapHive/releases/download/v1.2.1/TapHive-1.2.1.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
 
 ## Highlights
 
@@ -254,7 +254,7 @@ Then:
 ./gradlew :app:assembleRelease
 ```
 
-The signed release APK is `app/build/outputs/apk/release/app-release.apk`. Version metadata is `versionName 1.2.0`, `versionCode 5`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
+The signed release APK is `app/build/outputs/apk/release/app-release.apk`. Version metadata is `versionName 1.2.1`, `versionCode 6`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
 
 ## Install and configure
 

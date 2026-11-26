@@ -1,6 +1,14 @@
 # Changelog
 
-All notable changes to TapHive are recorded here. v1.2.0 is release-signed; the v1.1 core was device-verified on Android 16. v1.2.0 adds DNS diagnostics, per-IP detail, and external-service attribution; its device validation is pending while the test phone is offline.
+All notable changes to TapHive are recorded here. v1.2.1 is release-signed; the v1.1 core was device-verified on Android 16. v1.2.x adds DNS diagnostics, per-IP detail, external-service attribution, and the UDP/53 diagnostics filter; v1.2.x device/instrumentation validation is pending while the test phone is offline.
+
+## [1.2.1] — DNS UDP-port filter
+
+- DNS diagnostics now ignore UDP traffic whose remote port is not 53, including unrelated UDP/5353 traffic.
+- Added a regression test proving non-DNS UDP does not change query/response/timeout/malformed counters. Current JVM coverage: 18 tests.
+- Documentation now states that TCP DNS, DoH, and DoT are not visible to diagnostics.
+- Version metadata is `1.2.1` / code `6`.
+- No syslog schema change.
 
 ## [1.2.0] — DNS diagnostics and IP drill-down
 
@@ -9,8 +17,6 @@ All notable changes to TapHive are recorded here. v1.2.0 is release-signed; the 
 - Added a tappable per-destination IP detail screen: DNS name, country/region/city, ASN/org/ISP, provider, timestamp, refresh, and optional lookup.
 - Extended `ip_meta` to schema v3 with region, city, ASN, ISP, and provider, preserving existing data.
 - Added visible ipwho.is attribution and a data-source button in About, plus README data-source disclosure.
-- DNS diagnostics now count only UDP remote port 53; TCP DNS, DoH, and DoT are explicitly out of scope.
-- Added a regression test proving unrelated UDP traffic does not affect DNS counters. Current JVM coverage: 18 tests.
 - No syslog schema/version change; the new `th_dns_*` fields are additive.
 
 ## [1.1.2] — Country backfill and retry
