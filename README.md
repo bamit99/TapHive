@@ -50,12 +50,12 @@ Device traffic
     ▼
 VpnService tun fd
     │
-    ├──► PacketReader ──► flow_open / flow_close ──► SyslogSender ──► UDP/TCP ──► SIEM
+    ├──► PacketReader ──► flow_open / flow_close ──► SyslogSender ──► UDP/TCP/TLS ──► SIEM
     │        │
-    │        ├──► UidResolver ──► AppNameResolver
-    │        ├──► TrafficDatabase (retained flows + ip_meta)
-    │        ├──► DnsNameParser (port 53 A/AAAA answers)
-    │        └──► IpGeoResolver (optional HTTPS country/org/isp/as)
+    │        ├──► UidResolver ──► AppNameResolver ──► IpDetailActivity
+    │        ├──► TrafficDatabase (retained flows + ip_meta v3)
+    │        ├──► DnsNameParser ──► DnsDiagnostics (aggregate counters)
+    │        └──► IpGeoResolver (optional HTTPS country/region/city/ASN)
     │
     └──► Ipv4TunnelForwarder ──► protected TCP/UDP sockets ──► underlying network
              └──► rewritten replies written back to the tun fd
@@ -67,9 +67,10 @@ Key source files:
 app/src/main/java/com/taphive/app/
 ├── TapHiveApp.kt        # application singletons, startup resume
 ├── MainActivity.kt      # capture UI, format and target health
-├── TrafficActivity.kt   # history charts and top lists
-├── SettingsActivity.kt  # syslog, format, retention, boot opt-in
-├── AboutActivity.kt     # credits and license
+├── TrafficActivity.kt   # history charts, top lists, destination taps
+├── IpDetailActivity.kt  # per-IP DNS/geo/ASN detail and refresh
+├── SettingsActivity.kt  # syslog, format, retention, enrichment consent
+├── AboutActivity.kt     # credits, data sources, diagnostics, license
 ├── CaptureService.kt    # VpnService lifecycle + flow sink
 ├── BootReceiver.kt      # opt-in boot resume
 ├── PacketReader.kt      # Kotlin IP/transport parser + flow tracking
@@ -78,11 +79,13 @@ app/src/main/java/com/taphive/app/
 ├── IpPacket.kt          # shared endpoint/packet model
 ├── UidResolver.kt       # numeric uid attribution
 ├── AppNameResolver.kt   # UID -> package/app label
-├── DnsNameParser.kt     # A/AAAA answers from DNS responses
-├── IpGeoResolver.kt     # optional HTTPS country/org enrichment
-├── TrafficDatabase.kt   # retained flow history + IP metadata
+├── DnsNameParser.kt     # A/AAAA answers and query/rcode extraction
+├── DnsDiagnostics.kt    # aggregate DNS health/timeout counters
+├── IpGeoResolver.kt     # optional HTTPS country/region/city/ASN enrichment
+├── TrafficDatabase.kt   # retained flow history + ip_meta v3
 ├── TrafficTracker.kt    # live flow aggregation
-├── SyslogSender.kt      # RFC 3164/5424 formatter, queue, sockets
+├── SyslogFormatter.kt   # pure RFC 3164/5424 header formatter
+├── SyslogSender.kt      # syslog queue, UDP/TCP/TLS sockets
 ├── SyslogEvent.kt       # th_* JSON schema v2
 └── Prefs.kt             # SharedPreferences-backed settings
 ```
