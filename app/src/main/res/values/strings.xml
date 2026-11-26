@@ -9,6 +9,13 @@
     <string name="settings">SYSLOG TARGET</string>
     <string name="stats_initial">PACKETS 0 · FORWARDED 0</string>
     <string name="stats_format">PACKETS %1$d · FORWARDED %2$d</string>
+    <string name="syslog_format_status">FORMAT · %1$s</string>
+    <string name="target_off">SYSLOG DISABLED</string>
+    <string name="target_verified">LISTENER CONFIRMED · TCP</string>
+    <string name="target_unverified">UDP SENT · CHECK SYSLOG SERVER</string>
+    <string name="target_tcp_unverified">TCP NOT CONNECTED · CHECK SERVER</string>
+    <string name="target_stale">NO RECENT PACKETS · CHECK SERVER</string>
+    <string name="target_failed">CHECK SERVER / PORT</string>
     <string name="view_traffic">VIEW TRAFFIC</string>
     <string name="traffic_title">TRAFFIC</string>
     <string name="traffic_subtitle">WHO IS TALKING TO WHAT</string>

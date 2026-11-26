@@ -25,6 +25,9 @@ class MainActivity : Activity() {
     private lateinit var statusDot: android.view.View
     private lateinit var syslogInfo: TextView
     private lateinit var statsInfo: TextView
+    private lateinit var formatInfo: TextView
+    private lateinit var targetDot: android.view.View
+    private lateinit var targetStateView: TextView
     private lateinit var captureToggle: Button
     private var exitDialog: AlertDialog? = null
     private val handler = Handler(Looper.getMainLooper())
@@ -43,6 +46,9 @@ class MainActivity : Activity() {
         statusDot = findViewById(R.id.status_dot)
         syslogInfo = findViewById(R.id.syslog_info)
         statsInfo = findViewById(R.id.stats_info)
+        formatInfo = findViewById(R.id.format_info)
+        targetDot = findViewById(R.id.target_dot)
+        targetStateView = findViewById(R.id.target_state)
         captureToggle = findViewById(R.id.capture_toggle)
 
         captureToggle.setOnClickListener {
@@ -189,12 +195,67 @@ class MainActivity : Activity() {
             CaptureService.packetsCaptured,
             app.sender.forwardedEvents
         )
+
+        formatInfo.text = getString(
+            R.string.syslog_format_status,
+            if (prefs.syslogFormat == "rfc5424") "RFC 5424" else "RFC 3164"
+        )
+        updateTargetState(app, prefs)
+    }
+
+    /**
+     * Green requires proof (a TCP connect succeeded). UDP sends stay yellow because
+     * a datagram leaving the phone says nothing about the receiver; a hard send
+     * error turns the light red.
+     */
+    private fun updateTargetState(app: TapHiveApp, prefs: Prefs) {
+        val sender = app.sender
+        val dotRes: Int
+        val labelRes: Int
+        val colorRes: Int
+        when {
+            !prefs.enabled -> {
+                dotRes = R.drawable.dot_dim
+                labelRes = R.string.target_off
+                colorRes = R.color.neon_muted
+            }
+            sender.targetState == SyslogTargetState.FAILED -> {
+                dotRes = R.drawable.dot_red
+                labelRes = R.string.target_failed
+                colorRes = R.color.neon_red
+            }
+            sender.lastSuccessfulSendMs == 0L ||
+                System.currentTimeMillis() - sender.lastSuccessfulSendMs > STALE_TARGET_MS -> {
+                dotRes = R.drawable.dot_yellow
+                labelRes = R.string.target_stale
+                colorRes = R.color.neon_yellow
+            }
+            sender.targetState == SyslogTargetState.VERIFIED -> {
+                dotRes = R.drawable.dot_green
+                labelRes = R.string.target_verified
+                colorRes = R.color.neon_green
+            }
+            prefs.transport == "tcp" -> {
+                dotRes = R.drawable.dot_yellow
+                labelRes = R.string.target_tcp_unverified
+                colorRes = R.color.neon_yellow
+            }
+            else -> {
+                dotRes = R.drawable.dot_yellow
+                labelRes = R.string.target_unverified
+                colorRes = R.color.neon_yellow
+            }
+        }
+        targetDot.setBackgroundResource(dotRes)
+        targetStateView.setText(labelRes)
+        targetStateView.setTextColor(resources.getColor(colorRes, theme))
     }
 
     private companion object {
         const val REQ_VPN = 1001
         const val REQ_NOTIFICATIONS = 1002
         const val POLL_INTERVAL_MS = 1000L
+        const val STALE_TARGET_MS = 60_000L
         const val RESUME_CHECK_DELAY_MS = 700L
         const val BATTERY_PROMPT_DELAY_MS = 1500L
     }
