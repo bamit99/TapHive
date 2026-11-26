@@ -1,8 +1,14 @@
 # Changelog
 
-All notable changes to TapHive are recorded here. v1.1 is release-signed and device-verified on Android 16; see remaining risks below.
+All notable changes to TapHive are recorded here. v1.1.1 is release-signed; the v1.1 core was device-verified on Android 16. The v1.1.1 change is UI-only and was build/unit-test verified while the test device was offline.
 
-## [Unreleased] — v1.1 hardening
+## [1.1.1] — Country-state clarity
+
+- TRAFFIC now shows `EXTERNAL ENRICHMENT OFF · ENABLE IT IN SYSLOG TARGET` instead of `UNRESOLVED · 100%` when country lookup is opted out.
+- Version metadata is `1.1.1` / code `3`.
+- No change to the v2 syslog contract.
+
+## [1.1.0] — v1.1 hardening
 
 ### Security
 - Blocked TapHive's own traffic from entering its VPN with `addDisallowedApplication`.

@@ -60,4 +60,6 @@
     <string name="enrichment_hint">Sends public destination IPs to ipwho.is. DNS names stay on-device.</string>
     <string name="tls_hint">tls = TLS over TCP with system CAs; udp/tcp are cleartext.</string>
     <string name="syslog_enable_label">Enable syslog forwarding</string>
+    <string name="country_enrichment_off_hint">EXTERNAL ENRICHMENT OFF · ENABLE IT IN SYSLOG TARGET</string>
+    <string name="country_history_off_hint">LOCAL HISTORY OFF · ENABLE IT IN SYSLOG TARGET</string>
 </resources>

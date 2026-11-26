@@ -133,14 +133,19 @@ class TrafficActivity : Activity() {
 
         if (querying) return
         querying = true
+        val enrichment = app.prefs.enrichmentEnabled
         queryExecutor.execute {
             val appRows = if (hours <= 0) emptyList() else app.database.appRows()
-            val countryShares = if (hours <= 0) emptyList() else app.database.countryShares()
+            val countryShares = if (hours <= 0 || !enrichment) {
+                emptyList()
+            } else {
+                app.database.countryShares()
+            }
             val rows = if (hours <= 0) emptyList() else app.database.topDestinations(10)
             runOnUiThread {
                 querying = false
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                applyData(app, hours, appRows, countryShares, rows)
+                applyData(app, hours, enrichment, appRows, countryShares, rows)
             }
         }
     }
@@ -148,11 +153,12 @@ class TrafficActivity : Activity() {
     private fun applyData(
         app: TapHiveApp,
         hours: Int,
+        enrichment: Boolean,
         appRows: List<TrafficDatabase.AppRow>,
         countryShares: List<Pair<String, Long>>,
         rows: List<TrafficDatabase.DestinationRow>
     ) {
-        val signature = signatureOf(appRows, countryShares, rows)
+        val signature = signatureOf(hours, enrichment, appRows, countryShares, rows)
         if (signature == lastSignature) return
         lastSignature = signature
 
@@ -171,17 +177,23 @@ class TrafficActivity : Activity() {
         buildLegend(legendApp, appSlices)
 
         // -- By country -----------------------------------------------------
-        val countryTotal = countryShares.sumOf { it.second }
-        val countrySlices = countryShares.mapIndexed { index, (label, bytes) ->
-            PieChartView.Slice(
-                label,
-                bytes.toFloat() / maxOf(countryTotal, 1L),
-                PIE_COLORS[index % PIE_COLORS.size]
-            )
+        if (hours <= 0) {
+            showCountryState(getString(R.string.country_history_off_hint))
+        } else if (!enrichment) {
+            showCountryState(getString(R.string.country_enrichment_off_hint))
+        } else {
+            val countryTotal = countryShares.sumOf { it.second }
+            val countrySlices = countryShares.mapIndexed { index, (label, bytes) ->
+                PieChartView.Slice(
+                    label,
+                    bytes.toFloat() / maxOf(countryTotal, 1L),
+                    PIE_COLORS[index % PIE_COLORS.size]
+                )
+            }
+            pieCountry.slices = countrySlices
+            pieCountry.centerText = formatBytes(countryTotal)
+            buildLegend(legendCountry, countrySlices)
         }
-        pieCountry.slices = countrySlices
-        pieCountry.centerText = formatBytes(countryTotal)
-        buildLegend(legendCountry, countrySlices)
 
         // -- Top lists -------------------------------------------------------
         val emptyMessage = if (hours <= 0) {
@@ -191,6 +203,13 @@ class TrafficActivity : Activity() {
         }
         buildAppList(applicationsList, appRows, appNames, appTotal, emptyMessage)
         buildDestinationList(destinationsList, rows, emptyMessage)
+    }
+
+    private fun showCountryState(message: String) {
+        pieCountry.slices = emptyList()
+        pieCountry.centerText = ""
+        legendCountry.removeAllViews()
+        legendCountry.addView(emptyLabel(message))
     }
 
     private fun buildAppList(
@@ -324,10 +343,13 @@ class TrafficActivity : Activity() {
     }
 
     private fun signatureOf(
+        hours: Int,
+        enrichment: Boolean,
         apps: List<TrafficDatabase.AppRow>,
         countries: List<Pair<String, Long>>,
         rows: List<TrafficDatabase.DestinationRow>
     ): String = buildString {
+        append(hours).append(':').append(enrichment).append('|')
         append(apps.joinToString { "${it.uid}:${it.bytes}:${it.flows}" })
         append('|')
         append(countries.joinToString { "${it.first}:${it.second}" })
