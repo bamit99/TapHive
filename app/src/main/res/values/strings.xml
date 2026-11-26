@@ -32,6 +32,7 @@
     <string name="channel_name">TapHive capture</string>
     <string name="notification_title">TapHive is capturing</string>
     <string name="notification_text">Forwarding flow metadata to syslog</string>
+    <string name="notification_text_local">Capturing flow metadata locally</string>
     <string name="alert_channel_name">TapHive capture alerts</string>
     <string name="capture_start_failed_title">Capture did not start</string>
     <string name="capture_start_failed_text">Open TapHive to approve the VPN connection again</string>

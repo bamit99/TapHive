@@ -114,6 +114,7 @@ class SettingsActivity : Activity() {
             if (prefs.enrichmentEnabled) {
                 app.database.unresolvedIps(50).forEach(app.geoResolver::lookup)
             }
+            CaptureService.refreshNotification(this)
             Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show()
             finish()
         }

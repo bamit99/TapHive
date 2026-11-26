@@ -1,6 +1,14 @@
 # Changelog
 
-All notable changes to TapHive are recorded here. v1.2.1 is release-signed; the v1.1 core was device-verified on Android 16. v1.2.x adds DNS diagnostics, per-IP detail, external-service attribution, and the UDP/53 diagnostics filter; v1.2.x device/instrumentation validation is pending while the test phone is offline.
+All notable changes to TapHive are recorded here. v1.2.2 is release-signed; the v1.1 core was device-verified on Android 16. v1.2.x adds DNS diagnostics, per-IP detail, external-service attribution, and the UDP/53 diagnostics filter; v1.2.x device/instrumentation validation is pending while the test phone is offline.
+
+## [1.2.2] — Truthful capture notification
+
+- Notification now says `Capturing flow metadata locally` when syslog is disabled or no host is configured.
+- Notification says `Forwarding flow metadata to syslog` only when forwarding is enabled with a host.
+- Saving settings refreshes the foreground notification without restarting capture.
+- Version metadata is `1.2.2` / code `7`.
+- No syslog schema change.
 
 ## [1.2.1] — DNS UDP-port filter
 

@@ -67,6 +67,7 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
                 startCapture()
             }
             ACTION_STOP -> stopCapture()
+            ACTION_REFRESH -> if (isRunning) showForeground()
             else -> {
                 // Null intent: the system recreated a killed service. Only resume
                 // when the user left capture explicitly enabled.
@@ -379,10 +380,16 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
     private fun notification(): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pending = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+        val forwarding = app.prefs.enabled && app.prefs.host.isNotBlank()
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setContentTitle(getString(R.string.notification_title))
-            .setContentText(getString(R.string.notification_text))
+            .setContentText(
+                getString(
+                    if (forwarding) R.string.notification_text
+                    else R.string.notification_text_local
+                )
+            )
             .setContentIntent(pending)
             .setOngoing(true)
             .build()
@@ -426,6 +433,7 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         private const val TAG = "TapHiveCapture"
         const val ACTION_START = "com.taphive.app.START"
         const val ACTION_STOP = "com.taphive.app.STOP"
+        const val ACTION_REFRESH = "com.taphive.app.REFRESH"
         private const val CHANNEL_ID = "taphive_capture"
         private const val ALERT_CHANNEL_ID = "taphive_alerts"
         private const val NOTIFICATION_ID = 1
@@ -446,6 +454,18 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
 
         fun stop(context: Context) {
             context.startService(Intent(context, CaptureService::class.java).setAction(ACTION_STOP))
+        }
+
+        fun refreshNotification(context: Context) {
+            if (!isRunning) return
+            try {
+                context.startService(
+                    Intent(context, CaptureService::class.java).setAction(ACTION_REFRESH)
+                )
+            } catch (_: Exception) {
+                // Foreground settings screen; if the service cannot be reached,
+                // the notification refreshes on the next capture restart.
+            }
         }
 
         @Volatile
