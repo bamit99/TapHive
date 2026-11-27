@@ -34,9 +34,9 @@ class TrafficDatabaseTest {
     @Test
     fun countsDistinctFlowsNotSampleRows() {
         val now = System.currentTimeMillis()
-        database.recordFlow(now, "flow-1", 1000, "1.1.1.1", 443, 6, 100)
-        database.recordFlow(now, "flow-1", 1000, "1.1.1.1", 443, 6, 200)
-        database.recordFlow(now, "flow-2", 1000, "1.1.1.1", 443, 6, 300)
+        database.recordFlow(now, "flow-1", 1000, "1.1.1.1", 443, 6, 60, 40)
+        database.recordFlow(now, "flow-1", 1000, "1.1.1.1", 443, 6, 120, 80)
+        database.recordFlow(now, "flow-2", 1000, "1.1.1.1", 443, 6, 180, 120)
 
         val rows = database.appRows()
         assertEquals(1, rows.size)
@@ -45,9 +45,25 @@ class TrafficDatabaseTest {
     }
 
     @Test
+    fun appDetailIncludesDirectionAndProtocols() {
+        val now = System.currentTimeMillis()
+        database.recordFlow(now, "flow-1", 1000, "1.1.1.1", 443, 6, 60, 40)
+        database.recordFlow(now, "flow-1", 1000, "1.1.1.1", 443, 6, 120, 80)
+        database.recordFlow(now, "flow-2", 1000, "1.1.1.1", 53, 17, 10, 5)
+
+        val detail = database.appDetail(1000)!!
+        assertEquals(315L, detail.bytes)
+        assertEquals(190L, detail.bytesSent)
+        assertEquals(125L, detail.bytesReceived)
+        assertEquals(2L, detail.flows)
+        assertEquals(2, detail.protocols.size)
+        assertEquals(2, detail.destinations.size)
+    }
+
+    @Test
     fun unresolvedIpsDropsAfterCountryLookup() {
         database.recordFlow(
-            System.currentTimeMillis(), "flow-1", 1000, "116.119.113.161", 443, 17, 100
+            System.currentTimeMillis(), "flow-1", 1000, "116.119.113.161", 443, 17, 60, 40
         )
         assertEquals(listOf("116.119.113.161"), database.unresolvedIps(10))
 
@@ -59,7 +75,7 @@ class TrafficDatabaseTest {
     fun retentionOffClearsFlowsAndMetadata() {
         prefs.saveRetention(24)
         database.recordFlow(
-            System.currentTimeMillis(), "flow-1", 1000, "1.1.1.1", 443, 6, 100
+            System.currentTimeMillis(), "flow-1", 1000, "1.1.1.1", 443, 6, 60, 40
         )
         database.upsertGeo("1.1.1.1", "United States", "Example Org")
         prefs.saveRetention(0)

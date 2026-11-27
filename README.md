@@ -2,9 +2,9 @@
 
 TapHive is a clean-room Android app that captures **network flow metadata** on a local VPN interface and forwards it as structured **RFC 3164 or RFC 5424 JSON syslog events**. It also keeps a configurable local history with per-app and destination enrichment.
 
-> **v1.2.2 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.2.0 added DNS diagnostics, per-IP drill-down and attribution; v1.2.1 limits DNS diagnostics to plaintext UDP port 53; v1.2.2 makes the capture notification reflect local vs syslog forwarding. v1.2.2 device/instrumentation validation is pending while the test phone is offline. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
+> **v1.3.0 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.2.0 added DNS diagnostics, per-IP drill-down and attribution; v1.2.1 limits DNS diagnostics to plaintext UDP port 53; v1.2.2 makes the capture notification reflect local vs syslog forwarding; v1.3.0 adds an application detail screen with sent/received, protocol, destination and port statistics. v1.3.0 device/instrumentation validation is pending while the test phone is offline. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
 
-**Prebuilt APK:** [`TapHive-1.2.2.apk`](https://github.com/bamit99/TapHive/releases/download/v1.2.2/TapHive-1.2.2.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
+**Prebuilt APK:** [`TapHive-1.3.0.apk`](https://github.com/bamit99/TapHive/releases/download/v1.3.0/TapHive-1.3.0.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
 
 ## Highlights
 
@@ -67,8 +67,9 @@ Key source files:
 app/src/main/java/com/taphive/app/
 ├── TapHiveApp.kt        # application singletons, startup resume
 ├── MainActivity.kt      # capture UI, format and target health
-├── TrafficActivity.kt   # history charts, top lists, destination taps
+├── TrafficActivity.kt   # history charts, top lists, app/destination taps
 ├── IpDetailActivity.kt  # per-IP DNS/geo/ASN detail and refresh
+├── AppDetailActivity.kt # per-app direction/protocol/destination stats
 ├── SettingsActivity.kt  # syslog, format, retention, enrichment consent
 ├── AboutActivity.kt     # credits, data sources, diagnostics, license
 ├── CaptureService.kt    # VpnService lifecycle + flow sink
@@ -254,7 +255,7 @@ Then:
 ./gradlew :app:assembleRelease
 ```
 
-The signed release APK is `app/build/outputs/apk/release/app-release.apk`. Version metadata is `versionName 1.2.2`, `versionCode 7`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
+The signed release APK is `app/build/outputs/apk/release/app-release.apk`. Version metadata is `versionName 1.3.0`, `versionCode 8`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
 
 ## Install and configure
 
@@ -303,7 +304,7 @@ Verified on a CPH2585 phone and SM-P615 tablet running Android 16 (API 36):
 - Android 16 back showed the exit dialog; TRAFFIC back routing and navigation were checked.
 - SQLite migrated an existing v1 database to v2 with history preserved.
 - Force-stop and relaunch resumed capture when it was left running.
-- 18 JVM tests pass. Two instrumentation tests passed on Android 16 before the v1.2 changes; the v1.2 instrumentation suite has not been run because the test phone is offline. The release APK is verified signed and non-debuggable.
+- 18 JVM tests pass. Four instrumentation tests are present; the last executed device run was two tests before the v1.2/v1.3 changes. The current v1.3 instrumentation suite has not been run because the test phone is offline. The release APK is verified signed and non-debuggable.
 
 ## Privacy and permissions
 

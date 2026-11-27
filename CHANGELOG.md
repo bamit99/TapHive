@@ -1,6 +1,17 @@
 # Changelog
 
-All notable changes to TapHive are recorded here. v1.2.2 is release-signed; the v1.1 core was device-verified on Android 16. v1.2.x adds DNS diagnostics, per-IP detail, external-service attribution, and the UDP/53 diagnostics filter; v1.2.x device/instrumentation validation is pending while the test phone is offline.
+All notable changes to TapHive are recorded here. v1.3.0 is release-signed; the v1.1 core was device-verified on Android 16. v1.2.x adds DNS diagnostics, per-IP detail, external-service attribution, and the UDP/53 diagnostics filter; v1.2.x device/instrumentation validation is pending while the test phone is offline.
+
+## [1.3.0] — Application drill-down
+
+- Tapping an application in TRAFFIC opens a detail screen.
+- Shows total, sent, received, and distinct flow counts.
+- Shows protocol split with bytes and flows.
+- Shows top destinations and top ports for that application.
+- History schema v4 stores per-sample sent/received bytes; pre-1.3 rows show direction as unavailable rather than guessing.
+- Version metadata is `1.3.0` / code `8`.
+- 18 JVM tests pass; v1.3 instrumentation/device validation was not run because the test phone is offline.
+- No syslog schema change.
 
 ## [1.2.2] — Truthful capture notification
 

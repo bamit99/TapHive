@@ -228,7 +228,12 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         )
     }
 
-    override fun onFlowBytes(flowId: Long, timestampMs: Long, bytesDelta: Long) {
+    override fun onFlowBytes(
+        flowId: Long,
+        timestampMs: Long,
+        sentDelta: Long,
+        receivedDelta: Long
+    ) {
         val flow = app.tracker.openFlow(flowId) ?: return
         val id = flowId.toString()
         try {
@@ -240,7 +245,8 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
                     ip = flow.dstIp,
                     port = flow.dstPort,
                     protocol = flow.protocol,
-                    bytes = bytesDelta
+                    bytesSent = sentDelta,
+                    bytesReceived = receivedDelta
                 )
             }
         } catch (_: RejectedExecutionException) {

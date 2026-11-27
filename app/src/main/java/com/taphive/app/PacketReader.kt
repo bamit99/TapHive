@@ -44,8 +44,13 @@ class PacketReader(
             status: String
         )
 
-        /** Incremental byte delta for local history, including still-open flows. */
-        fun onFlowBytes(flowId: Long, timestampMs: Long, bytesDelta: Long)
+        /** Incremental direction bytes for local history, including open flows. */
+        fun onFlowBytes(
+            flowId: Long,
+            timestampMs: Long,
+            sentDelta: Long,
+            receivedDelta: Long
+        )
 
         /** Called when continuing would leave the VPN up without a working reader. */
         fun onCaptureError(message: String) {}
@@ -67,7 +72,8 @@ class PacketReader(
         @Volatile
         var lastSeen: Long = openedAt
 
-        var sampledBytes: Long = 0
+        var sampledSent: Long = 0
+        var sampledReceived: Long = 0
     }
 
     private val capturedPackets = AtomicLong(0)
@@ -210,11 +216,16 @@ class PacketReader(
     /** Feeds local history with deltas from flows that are still open. */
     private fun sampleFlows(now: Long) {
         for (flow in flows.values) {
-            val total = flow.bytesSent.get() + flow.bytesReceived.get()
-            val delta = total - flow.sampledBytes
-            if (delta > 0) {
-                flow.sampledBytes = total
-                safeEmit { sink.onFlowBytes(flow.id, now, delta) }
+            val sent = flow.bytesSent.get()
+            val received = flow.bytesReceived.get()
+            val sentDelta = sent - flow.sampledSent
+            val receivedDelta = received - flow.sampledReceived
+            if (sentDelta > 0 || receivedDelta > 0) {
+                flow.sampledSent = sent
+                flow.sampledReceived = received
+                safeEmit {
+                    sink.onFlowBytes(flow.id, now, sentDelta, receivedDelta)
+                }
             }
         }
     }
@@ -224,11 +235,16 @@ class PacketReader(
         while (iterator.hasNext()) {
             val flow = iterator.next()
             if (!force && now - flow.lastSeen < IDLE_TIMEOUT_MS) continue
-            val total = flow.bytesSent.get() + flow.bytesReceived.get()
-            val pending = total - flow.sampledBytes
-            if (pending > 0) {
-                flow.sampledBytes = total
-                safeEmit { sink.onFlowBytes(flow.id, now, pending) }
+            val sent = flow.bytesSent.get()
+            val received = flow.bytesReceived.get()
+            val sentPending = sent - flow.sampledSent
+            val receivedPending = received - flow.sampledReceived
+            if (sentPending > 0 || receivedPending > 0) {
+                flow.sampledSent = sent
+                flow.sampledReceived = received
+                safeEmit {
+                    sink.onFlowBytes(flow.id, now, sentPending, receivedPending)
+                }
             }
             safeEmit {
                 sink.onFlowClose(

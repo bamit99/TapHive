@@ -50,6 +50,32 @@ class TrafficDatabase(
         val updatedAt: Long
     )
 
+    data class ProtocolRow(
+        val protocol: Int,
+        val bytes: Long,
+        val bytesSent: Long,
+        val bytesReceived: Long,
+        val flows: Long
+    )
+
+    data class PortRow(
+        val port: Int,
+        val protocol: Int,
+        val bytes: Long,
+        val flows: Long
+    )
+
+    data class AppDetail(
+        val uid: Int,
+        val bytes: Long,
+        val bytesSent: Long,
+        val bytesReceived: Long,
+        val flows: Long,
+        val protocols: List<ProtocolRow>,
+        val destinations: List<DestinationRow>,
+        val ports: List<PortRow>
+    )
+
     init {
         setWriteAheadLoggingEnabled(true)
     }
@@ -64,7 +90,9 @@ class TrafficDatabase(
                 "ip TEXT NOT NULL," +
                 "port INTEGER NOT NULL," +
                 "protocol INTEGER NOT NULL," +
-                "bytes INTEGER NOT NULL)"
+                "bytes INTEGER NOT NULL," +
+                "bytes_sent INTEGER NOT NULL DEFAULT 0," +
+                "bytes_received INTEGER NOT NULL DEFAULT 0)"
         )
         createIndexes(db)
         db.execSQL(
@@ -96,6 +124,10 @@ class TrafficDatabase(
             db.execSQL("ALTER TABLE ip_meta ADD COLUMN isp TEXT")
             db.execSQL("ALTER TABLE ip_meta ADD COLUMN provider TEXT")
         }
+        if (oldVersion < 4) {
+            db.execSQL("ALTER TABLE flows ADD COLUMN bytes_sent INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE flows ADD COLUMN bytes_received INTEGER NOT NULL DEFAULT 0")
+        }
     }
 
     private fun createIndexes(db: SQLiteDatabase) {
@@ -116,9 +148,11 @@ class TrafficDatabase(
         ip: String,
         port: Int,
         protocol: Int,
-        bytes: Long
+        bytesSent: Long,
+        bytesReceived: Long
     ) {
-        if (bytes <= 0L || prefs.retentionHours <= 0) return
+        val total = bytesSent + bytesReceived
+        if (total <= 0L || prefs.retentionHours <= 0) return
         writableDatabase.insert(
             "flows",
             null,
@@ -129,7 +163,9 @@ class TrafficDatabase(
                 put("ip", ip)
                 put("port", port)
                 put("protocol", protocol)
-                put("bytes", bytes)
+                put("bytes", total)
+                put("bytes_sent", bytesSent)
+                put("bytes_received", bytesReceived)
             }
         )
         if (System.currentTimeMillis() - lastPruneMs >= PRUNE_INTERVAL_MS) prune()
@@ -247,6 +283,95 @@ class TrafficDatabase(
         return rows
     }
 
+    fun appDetail(uid: Int, limit: Int = 10): AppDetail? {
+        val capped = limit.coerceIn(1, 50)
+        var total = 0L
+        var sent = 0L
+        var received = 0L
+        var flows = 0L
+        readableDatabase.rawQuery(
+            "SELECT COALESCE(SUM(bytes), 0), COALESCE(SUM(bytes_sent), 0), " +
+                "COALESCE(SUM(bytes_received), 0), COUNT(DISTINCT flow_id) " +
+                "FROM flows WHERE uid = ?",
+            arrayOf(uid.toString())
+        ).use { cursor ->
+            if (cursor.moveToFirst()) {
+                total = cursor.getLong(0)
+                sent = cursor.getLong(1)
+                received = cursor.getLong(2)
+                flows = cursor.getLong(3)
+            }
+        }
+        if (total <= 0L) return null
+
+        val protocols = ArrayList<ProtocolRow>()
+        readableDatabase.rawQuery(
+            "SELECT protocol, SUM(bytes), COALESCE(SUM(bytes_sent), 0), " +
+                "COALESCE(SUM(bytes_received), 0), COUNT(DISTINCT flow_id) " +
+                "FROM flows WHERE uid = ? GROUP BY protocol ORDER BY SUM(bytes) DESC",
+            arrayOf(uid.toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                protocols.add(
+                    ProtocolRow(
+                        protocol = cursor.getInt(0),
+                        bytes = cursor.getLong(1),
+                        bytesSent = cursor.getLong(2),
+                        bytesReceived = cursor.getLong(3),
+                        flows = cursor.getLong(4)
+                    )
+                )
+            }
+        }
+
+        val destinations = ArrayList<DestinationRow>()
+        readableDatabase.rawQuery(
+            "SELECT f.ip, f.port, f.protocol, f.uid, SUM(f.bytes) AS total, " +
+                "COUNT(DISTINCT f.flow_id) AS cnt, m.country, m.org, m.dns_name " +
+                "FROM flows f LEFT JOIN ip_meta m ON m.ip = f.ip " +
+                "WHERE f.uid = ? GROUP BY f.ip, f.port, f.protocol, f.uid " +
+                "ORDER BY total DESC LIMIT ?",
+            arrayOf(uid.toString(), capped.toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                destinations.add(
+                    DestinationRow(
+                        ip = cursor.getString(0),
+                        port = cursor.getInt(1),
+                        protocol = cursor.getInt(2),
+                        uid = cursor.getInt(3),
+                        bytes = cursor.getLong(4),
+                        flows = cursor.getLong(5),
+                        country = cursor.getString(6),
+                        org = cursor.getString(7),
+                        dnsName = cursor.getString(8)
+                    )
+                )
+            }
+        }
+
+        val ports = ArrayList<PortRow>()
+        readableDatabase.rawQuery(
+            "SELECT port, protocol, SUM(bytes), COUNT(DISTINCT flow_id) " +
+                "FROM flows WHERE uid = ? GROUP BY port, protocol " +
+                "ORDER BY SUM(bytes) DESC LIMIT ?",
+            arrayOf(uid.toString(), capped.toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                ports.add(
+                    PortRow(
+                        port = cursor.getInt(0),
+                        protocol = cursor.getInt(1),
+                        bytes = cursor.getLong(2),
+                        flows = cursor.getLong(3)
+                    )
+                )
+            }
+        }
+
+        return AppDetail(uid, total, sent, received, flows, protocols, destinations, ports)
+    }
+
     /** ip -> total bytes, largest first. */
     fun ipShares(): List<Pair<String, Long>> {
         val rows = ArrayList<Pair<String, Long>>()
@@ -318,7 +443,7 @@ class TrafficDatabase(
 
     private companion object {
         const val DB_NAME = "taphive_history.db"
-        const val DB_VERSION = 3
+        const val DB_VERSION = 4
         const val PRUNE_INTERVAL_MS = 60_000L
         const val META_TTL_MS = 30L * 24 * 3_600_000L
     }

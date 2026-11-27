@@ -86,4 +86,15 @@
     <string name="ip_detail_data_source">DATA SOURCE · IPWHO.IS</string>
     <string name="ip_detail_attribution">IP geolocation is optional, approximate, and provided by ipwho.is.</string>
     <string name="ip_detail_updated">UPDATED</string>
+    <string name="app_detail_title">APPLICATION</string>
+    <string name="app_detail_subtitle">APP TRAFFIC DETAIL</string>
+    <string name="app_detail_total">TOTAL</string>
+    <string name="app_detail_sent">SENT</string>
+    <string name="app_detail_received">RECEIVED</string>
+    <string name="app_detail_flows">FLOWS</string>
+    <string name="app_detail_protocols">PROTOCOLS</string>
+    <string name="app_detail_destinations">TOP DESTINATIONS</string>
+    <string name="app_detail_ports">TOP PORTS</string>
+    <string name="app_detail_no_data">NO HISTORY FOR THIS APP</string>
+    <string name="app_detail_old_direction">DIRECTION SPLIT NOT RECORDED FOR PRE-1.3 HISTORY</string>
 </resources>

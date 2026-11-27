@@ -242,7 +242,13 @@ class TrafficActivity : Activity() {
                 container,
                 names[index],
                 "UID ${row.uid} · $share% of traffic · ${row.flows} $flowLabel",
-                formatBytes(row.bytes)
+                formatBytes(row.bytes),
+                onClick = {
+                    startActivity(
+                        Intent(this, AppDetailActivity::class.java)
+                            .putExtra(AppDetailActivity.EXTRA_UID, row.uid)
+                    )
+                }
             )
         }
     }
