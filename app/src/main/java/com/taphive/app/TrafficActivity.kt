@@ -7,8 +7,11 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.window.OnBackInvokedCallback
@@ -31,6 +34,8 @@ class TrafficActivity : Activity() {
     private lateinit var tabApps: Button
     private lateinit var tabDestinations: Button
     private lateinit var historyInfo: TextView
+    private lateinit var search: EditText
+    private var filter = ""
     private var showApps = false
     private var lastSignature = ""
     private var querying = false
@@ -58,6 +63,16 @@ class TrafficActivity : Activity() {
         tabApps = findViewById(R.id.tab_apps)
         tabDestinations = findViewById(R.id.tab_destinations)
         historyInfo = findViewById(R.id.history_info)
+        search = findViewById(R.id.search)
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                filter = s?.toString()?.trim().orEmpty()
+                lastSignature = ""
+                render()
+            }
+        })
 
         tabApps.setOnClickListener { selectTab(true) }
         tabDestinations.setOnClickListener { selectTab(false) }
@@ -142,7 +157,13 @@ class TrafficActivity : Activity() {
             } else {
                 app.database.countryShares()
             }
-            val rows = if (hours <= 0) emptyList() else app.database.topDestinations(10)
+            val rows = if (hours <= 0) {
+                emptyList()
+            } else if (filter.isBlank()) {
+                app.database.topDestinations(10)
+            } else {
+                app.database.searchDestinations(filter, 200)
+            }
             val unresolved = if (enrichment && !backfillRequested) {
                 app.database.unresolvedIps(50)
             } else {
@@ -155,7 +176,7 @@ class TrafficActivity : Activity() {
                     backfillRequested = true
                     unresolved.forEach(app.geoResolver::lookup)
                 }
-                applyData(app, hours, enrichment, appRows, countryShares, rows)
+                applyData(app, hours, enrichment, filter, appRows, countryShares, rows)
             }
         }
     }
@@ -164,11 +185,12 @@ class TrafficActivity : Activity() {
         app: TapHiveApp,
         hours: Int,
         enrichment: Boolean,
+        filter: String,
         appRows: List<TrafficDatabase.AppRow>,
         countryShares: List<Pair<String, Long>>,
         rows: List<TrafficDatabase.DestinationRow>
     ) {
-        val signature = signatureOf(hours, enrichment, appRows, countryShares, rows)
+        val signature = signatureOf(hours, enrichment, filter, appRows, countryShares, rows)
         if (signature == lastSignature) return
         lastSignature = signature
 
@@ -206,13 +228,49 @@ class TrafficActivity : Activity() {
         }
 
         // -- Top lists -------------------------------------------------------
-        val emptyMessage = if (hours <= 0) {
-            getString(R.string.history_off_hint)
-        } else {
-            getString(R.string.no_traffic)
+        val emptyMessage = when {
+            hours <= 0 -> getString(R.string.history_off_hint)
+            filter.isNotBlank() -> getString(R.string.no_search_matches)
+            else -> getString(R.string.no_traffic)
         }
-        buildAppList(applicationsList, appRows, appNames, appTotal, emptyMessage)
-        buildDestinationList(destinationsList, rows, emptyMessage)
+        val visibleAppIndices = if (filter.isBlank()) {
+            appRows.indices.toList()
+        } else {
+            appRows.indices.filter { index ->
+                appNames[index].contains(filter, ignoreCase = true) ||
+                    appRows[index].uid.toString().contains(filter)
+            }
+        }
+        buildAppList(
+            applicationsList,
+            visibleAppIndices.map { appRows[it] },
+            visibleAppIndices.map { appNames[it] },
+            appTotal,
+            emptyMessage
+        )
+
+        val visibleDestinations = if (filter.isBlank()) {
+            rows.take(10)
+        } else {
+            rows.filter { destinationMatches(it, filter) }.take(50)
+        }
+        buildDestinationList(destinationsList, visibleDestinations, emptyMessage)
+    }
+
+    private fun destinationMatches(
+        row: TrafficDatabase.DestinationRow,
+        query: String
+    ): Boolean {
+        val haystack = listOfNotNull(
+            row.ip,
+            row.port.toString(),
+            protocolName(row.protocol),
+            row.country,
+            row.org,
+            row.dnsName,
+            row.uid.toString()
+        )
+        return haystack.any { it.contains(query, ignoreCase = true) }
     }
 
     private fun showCountryState(message: String) {
@@ -386,11 +444,12 @@ class TrafficActivity : Activity() {
     private fun signatureOf(
         hours: Int,
         enrichment: Boolean,
+        filter: String,
         apps: List<TrafficDatabase.AppRow>,
         countries: List<Pair<String, Long>>,
         rows: List<TrafficDatabase.DestinationRow>
     ): String = buildString {
-        append(hours).append(':').append(enrichment).append('|')
+        append(hours).append(':').append(enrichment).append(':').append(filter).append('|')
         append(apps.joinToString { "${it.uid}:${it.bytes}:${it.flows}" })
         append('|')
         append(countries.joinToString { "${it.first}:${it.second}" })

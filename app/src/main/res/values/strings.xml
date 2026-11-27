@@ -22,6 +22,8 @@
     <string name="traffic_by_app">BY APPLICATION</string>
     <string name="traffic_by_country">BY COUNTRY</string>
     <string name="traffic_top_destinations">TOP DESTINATIONS</string>
+    <string name="traffic_search_hint">SEARCH APP / IP / PORT / ORG / COUNTRY</string>
+    <string name="no_search_matches">NO MATCHES</string>
     <string name="top_applications">TOP APPLICATIONS</string>
     <string name="history_window">LOCAL HISTORY · LAST %1$s</string>
     <string name="history_placeholder">LOCAL HISTORY</string>

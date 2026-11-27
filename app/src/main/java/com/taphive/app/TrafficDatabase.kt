@@ -413,6 +413,40 @@ class TrafficDatabase(
         return rows
     }
 
+    fun searchDestinations(query: String, limit: Int): List<DestinationRow> {
+        val like = "%$query%"
+        val rows = ArrayList<DestinationRow>()
+        readableDatabase.rawQuery(
+            "SELECT f.ip, f.port, f.protocol, f.uid, SUM(f.bytes) AS total, " +
+                "COUNT(DISTINCT f.flow_id) AS cnt, m.country, m.org, m.dns_name " +
+                "FROM flows f LEFT JOIN ip_meta m ON m.ip = f.ip " +
+                "WHERE f.ip LIKE ? OR CAST(f.port AS TEXT) LIKE ? " +
+                "OR CAST(f.uid AS TEXT) LIKE ? OR IFNULL(m.country, '') LIKE ? " +
+                "OR IFNULL(m.org, '') LIKE ? OR IFNULL(m.dns_name, '') LIKE ? " +
+                "OR (CASE f.protocol WHEN 6 THEN 'TCP' WHEN 17 THEN 'UDP' " +
+                "ELSE CAST(f.protocol AS TEXT) END) LIKE ? " +
+                "GROUP BY f.ip, f.port, f.protocol, f.uid ORDER BY total DESC LIMIT ?",
+            arrayOf(like, like, like, like, like, like, like, limit.coerceIn(1, 500).toString())
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                rows.add(
+                    DestinationRow(
+                        ip = cursor.getString(0),
+                        port = cursor.getInt(1),
+                        protocol = cursor.getInt(2),
+                        uid = cursor.getInt(3),
+                        bytes = cursor.getLong(4),
+                        flows = cursor.getLong(5),
+                        country = cursor.getString(6),
+                        org = cursor.getString(7),
+                        dnsName = cursor.getString(8)
+                    )
+                )
+            }
+        }
+        return rows
+    }
+
     fun topDestinations(limit: Int): List<DestinationRow> {
         val rows = ArrayList<DestinationRow>()
         readableDatabase.rawQuery(

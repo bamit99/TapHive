@@ -2,9 +2,9 @@
 
 TapHive is a clean-room Android app that captures **network flow metadata** on a local VPN interface and forwards it as structured **RFC 3164 or RFC 5424 JSON syslog events**. It also keeps a configurable local history with per-app and destination enrichment.
 
-> **v1.3.0 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.2.0 added DNS diagnostics, per-IP drill-down and attribution; v1.2.1 limits DNS diagnostics to plaintext UDP port 53; v1.2.2 makes the capture notification reflect local vs syslog forwarding; v1.3.0 adds an application detail screen with sent/received, protocol, destination and port statistics. v1.3.0 device/instrumentation validation is pending while the test phone is offline. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
+> **v1.4.0 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.2.0 added DNS diagnostics, per-IP drill-down and attribution; v1.2.1 limits DNS diagnostics to plaintext UDP port 53; v1.2.2 makes the capture notification reflect local vs syslog forwarding; v1.3.0 adds an application detail screen with sent/received, protocol, destination and port statistics; v1.4.0 adds search over applications and destinations. v1.4.0 device/instrumentation validation is pending while the test phone is offline. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
 
-**Prebuilt APK:** [`TapHive-1.3.0.apk`](https://github.com/bamit99/TapHive/releases/download/v1.3.0/TapHive-1.3.0.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
+**Prebuilt APK:** [`TapHive-1.4.0.apk`](https://github.com/bamit99/TapHive/releases/download/v1.4.0/TapHive-1.4.0.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
 
 ## Highlights
 
@@ -67,7 +67,7 @@ Key source files:
 app/src/main/java/com/taphive/app/
 ├── TapHiveApp.kt        # application singletons, startup resume
 ├── MainActivity.kt      # capture UI, format and target health
-├── TrafficActivity.kt   # history charts, top lists, app/destination taps
+├── TrafficActivity.kt   # history charts, search, app/destination taps
 ├── IpDetailActivity.kt  # per-IP DNS/geo/ASN detail and refresh
 ├── AppDetailActivity.kt # per-app direction/protocol/destination stats
 ├── SettingsActivity.kt  # syslog, format, retention, enrichment consent
@@ -255,7 +255,7 @@ Then:
 ./gradlew :app:assembleRelease
 ```
 
-The signed release APK is `app/build/outputs/apk/release/app-release.apk`. Version metadata is `versionName 1.3.0`, `versionCode 8`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
+The signed release APK is `app/build/outputs/apk/release/app-release.apk`. Version metadata is `versionName 1.4.0`, `versionCode 9`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
 
 ## Install and configure
 

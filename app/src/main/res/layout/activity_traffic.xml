@@ -60,6 +60,17 @@
         android:textSize="10sp"
         android:letterSpacing="0.14" />
 
+    <EditText
+        android:id="@+id/search"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:hint="@string/traffic_search_hint"
+        android:inputType="text"
+        android:maxLines="1"
+        android:singleLine="true"
+        style="@style/NeonField" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

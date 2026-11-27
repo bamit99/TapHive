@@ -1,6 +1,15 @@
 # Changelog
 
-All notable changes to TapHive are recorded here. v1.3.0 is release-signed; the v1.1 core was device-verified on Android 16. v1.2.x adds DNS diagnostics, per-IP detail, external-service attribution, and the UDP/53 diagnostics filter; v1.2.x device/instrumentation validation is pending while the test phone is offline.
+All notable changes to TapHive are recorded here. v1.4.0 is release-signed; the v1.1 core was device-verified on Android 16. v1.2.x adds DNS diagnostics, per-IP detail, external-service attribution, and the UDP/53 diagnostics filter; v1.2.x device/instrumentation validation is pending while the test phone is offline.
+
+## [1.4.0] — Search applications and destinations
+
+- Added a fixed search field above the TRAFFIC tabs.
+- Application search matches display name or UID.
+- Destination search matches IP, port, protocol, UID, country, organisation, or DNS name against the retained history.
+- Search results update live without restarting capture.
+- Version metadata is `1.4.0` / code `9`.
+- No syslog schema change.
 
 ## [1.3.0] — Application drill-down
 
