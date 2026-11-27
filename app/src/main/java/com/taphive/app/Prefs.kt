@@ -23,6 +23,10 @@ class Prefs(context: Context) {
     val enrichmentEnabled: Boolean
         get() = store.getBoolean(KEY_ENRICHMENT_ENABLED, false)
 
+    /** Opt-in for adding app/DNS/geo fields to syslog flow events. */
+    val syslogEnriched: Boolean
+        get() = store.getBoolean(KEY_SYSLOG_ENRICHED, false)
+
     /** True while the user wants capture active; survives process death. */
     val captureWanted: Boolean get() = store.getBoolean(KEY_CAPTURE_WANTED, false)
 
@@ -46,6 +50,10 @@ class Prefs(context: Context) {
 
     fun setEnrichmentEnabled(enabled: Boolean) {
         store.edit().putBoolean(KEY_ENRICHMENT_ENABLED, enabled).apply()
+    }
+
+    fun setSyslogEnriched(enabled: Boolean) {
+        store.edit().putBoolean(KEY_SYSLOG_ENRICHED, enabled).apply()
     }
 
     fun markBatteryAsked() {
@@ -90,6 +98,7 @@ class Prefs(context: Context) {
         const val DEFAULT_SYSLOG_FORMAT = "rfc3164"
         const val KEY_RETENTION_HOURS = "retention_hours"
         const val KEY_ENRICHMENT_ENABLED = "external_enrichment_enabled"
+        const val KEY_SYSLOG_ENRICHED = "syslog_enriched"
         const val KEY_CAPTURE_WANTED = "capture_wanted"
         const val KEY_START_AT_BOOT = "start_at_boot"
         const val KEY_BATTERY_ASKED = "battery_asked"

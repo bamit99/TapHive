@@ -35,7 +35,16 @@ data class SyslogEvent(
     val dnsNxdomain: Long? = null,
     val dnsServfail: Long? = null,
     val dnsOtherErrors: Long? = null,
-    val dnsMalformed: Long? = null
+    val dnsMalformed: Long? = null,
+    val appName: String? = null,
+    val country: String? = null,
+    val region: String? = null,
+    val city: String? = null,
+    val asn: Int? = null,
+    val org: String? = null,
+    val isp: String? = null,
+    val dnsName: String? = null,
+    val enrichmentProvider: String? = null
 ) {
     fun toJson(): String = JSONObject().apply {
         put("th_schema_version", 2)
@@ -65,6 +74,15 @@ data class SyslogEvent(
         putNullable("th_dns_servfail", dnsServfail)
         putNullable("th_dns_other_errors", dnsOtherErrors)
         putNullable("th_dns_malformed", dnsMalformed)
+        putNullable("th_app_name", appName)
+        putNullable("th_country", country)
+        putNullable("th_region", region)
+        putNullable("th_city", city)
+        putNullable("th_asn", asn)
+        putNullable("th_org", org)
+        putNullable("th_isp", isp)
+        putNullable("th_dns_name", dnsName)
+        putNullable("th_enrichment_provider", enrichmentProvider)
     }.toString()
 }
 

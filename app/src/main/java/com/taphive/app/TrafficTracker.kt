@@ -51,8 +51,8 @@ class TrafficTracker {
         bytesReceived: Long,
         packetsSent: Long,
         packetsReceived: Long
-    ) = synchronized(this) {
-        val flow = openFlows.remove(flowId) ?: return
+    ): OpenFlow? = synchronized(this) {
+        val flow = openFlows.remove(flowId) ?: return@synchronized null
         val bytes = bytesSent + bytesReceived
         val ip = ipTotals.getOrPut(flow.dstIp) { IpTotals(0, 0, flow.uid, flow.dstPort, flow.protocol) }
         ip.bytes += bytes
@@ -61,6 +61,7 @@ class TrafficTracker {
         val app = appTotals.getOrPut(flow.uid) { AppTotals() }
         app.bytes += bytes
         app.flows += 1
+        flow
     }
 
     fun reset() = synchronized(this) {

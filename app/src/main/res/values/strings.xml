@@ -63,6 +63,8 @@
     <string name="enrichment_hint">Sends public destination IPs to ipwho.is. DNS names stay on-device.</string>
     <string name="tls_hint">tls = TLS over TCP with system CAs; udp/tcp are cleartext.</string>
     <string name="syslog_enable_label">Enable syslog forwarding</string>
+    <string name="syslog_enriched_label">Include app, DNS and geo fields</string>
+    <string name="syslog_enriched_hint">Adds local app labels and enrichment fields to flow events. Raw UID/IP/ports remain.</string>
     <string name="country_enrichment_off_hint">EXTERNAL ENRICHMENT OFF · ENABLE IT IN SYSLOG TARGET</string>
     <string name="country_history_off_hint">LOCAL HISTORY OFF · ENABLE IT IN SYSLOG TARGET</string>
     <string name="about_diagnostics">DNS DIAGNOSTICS</string>

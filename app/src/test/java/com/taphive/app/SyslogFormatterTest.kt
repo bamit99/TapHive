@@ -49,6 +49,30 @@ class SyslogFormatterTest {
     }
 
     @Test
+    fun includesEnrichedFieldsWhenPresent() {
+        val enriched = flow.copy(
+            appName = "Chrome",
+            country = "India",
+            region = "Karnataka",
+            city = "Bengaluru",
+            asn = 9498,
+            org = "Bharti Airtel",
+            isp = "Airtel",
+            dnsName = "example.com",
+            enrichmentProvider = "ipwho.is"
+        )
+        val line = SyslogFormatter.format(
+            enriched, facility = 13, appName = "TapHive", host = "SM-P615",
+            pid = 1, format = "rfc5424", dropped = 0, forwarded = 0,
+            now = Date(0)
+        )
+        assertTrue(line.contains("\"th_app_name\":\"Chrome\""))
+        assertTrue(line.contains("\"th_country\":\"India\""))
+        assertTrue(line.contains("\"th_asn\":9498"))
+        assertTrue(line.contains("\"th_dns_name\":\"example.com\""))
+    }
+
+    @Test
     fun sanitisesHostAndAppName() {
         val line = SyslogFormatter.format(
             flow, facility = 13, appName = "Tap/Hive", host = "SM P615",

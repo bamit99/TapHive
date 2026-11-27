@@ -149,6 +149,23 @@
                 android:textColor="@color/neon_muted"
                 android:textSize="11sp" />
 
+            <CheckBox
+                android:id="@+id/syslog_enriched"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:buttonTint="@color/neon_cyan"
+                android:text="@string/syslog_enriched_label"
+                android:textColor="@color/neon_text" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="34dp"
+                android:text="@string/syslog_enriched_hint"
+                android:textColor="@color/neon_muted"
+                android:textSize="11sp" />
+
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

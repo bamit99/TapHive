@@ -23,6 +23,7 @@ class SettingsActivity : Activity() {
         val port = findViewById<EditText>(R.id.syslog_port)
         val transport = findViewById<Spinner>(R.id.syslog_transport)
         val format = findViewById<Spinner>(R.id.syslog_format)
+        val enriched = findViewById<CheckBox>(R.id.syslog_enriched)
         val facility = findViewById<EditText>(R.id.syslog_facility)
         val appName = findViewById<EditText>(R.id.syslog_app_name)
         val startAtBoot = findViewById<CheckBox>(R.id.start_at_boot)
@@ -71,6 +72,7 @@ class SettingsActivity : Activity() {
         appName.setText(prefs.appName)
         startAtBoot.isChecked = prefs.startAtBoot
         enrichment.isChecked = prefs.enrichmentEnabled
+        enriched.isChecked = prefs.syslogEnriched
         retention.setSelection(
             retentionHours.indexOf(prefs.retentionHours).coerceAtLeast(0)
         )
@@ -100,6 +102,7 @@ class SettingsActivity : Activity() {
                 .coerceIn(0, formatValues.lastIndex)
             prefs.setStartAtBoot(startAtBoot.isChecked)
             prefs.setEnrichmentEnabled(enrichment.isChecked)
+            prefs.setSyslogEnriched(enriched.isChecked)
             prefs.saveRetention(retentionHours[retentionIndex])
             app.database.prune()
             prefs.save(

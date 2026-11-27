@@ -1,6 +1,14 @@
 # Changelog
 
-All notable changes to TapHive are recorded here. v1.4.0 is release-signed; the v1.1 core was device-verified on Android 16. v1.2.x adds DNS diagnostics, per-IP detail, external-service attribution, and the UDP/53 diagnostics filter; v1.2.x device/instrumentation validation is pending while the test phone is offline.
+All notable changes to TapHive are recorded here. v1.5.0 is release-signed; the v1.1 core was device-verified on Android 16. v1.2.x adds DNS diagnostics, per-IP detail, external-service attribution, and the UDP/53 diagnostics filter; v1.2.x device/instrumentation validation is pending while the test phone is offline.
+
+## [1.5.0] — Optional enriched syslog fields
+
+- Added `Include app, DNS and geo fields` under SYSLOG TARGET. It is off by default.
+- When enabled, flow events carry optional `th_app_name`, `th_country`, `th_region`, `th_city`, `th_asn`, `th_org`, `th_isp`, `th_dns_name`, and `th_enrichment_provider` alongside the existing raw fields.
+- Added a formatter test for the enriched JSON keys. Current JVM coverage: 19 tests.
+- No syslog schema version change; fields are additive.
+- Version metadata is `1.5.0` / code `10`.
 
 ## [1.4.0] — Search applications and destinations
 

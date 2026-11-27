@@ -2,9 +2,9 @@
 
 TapHive is a clean-room Android app that captures **network flow metadata** on a local VPN interface and forwards it as structured **RFC 3164 or RFC 5424 JSON syslog events**. It also keeps a configurable local history with per-app and destination enrichment.
 
-> **v1.4.0 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.2.0 added DNS diagnostics, per-IP drill-down and attribution; v1.2.1 limits DNS diagnostics to plaintext UDP port 53; v1.2.2 makes the capture notification reflect local vs syslog forwarding; v1.3.0 adds an application detail screen with sent/received, protocol, destination and port statistics; v1.4.0 adds search over applications and destinations. v1.4.0 device/instrumentation validation is pending while the test phone is offline. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
+> **v1.5.0 status:** release-signed; the v1.1 core was device-verified on Android 16, and v1.2.0 added DNS diagnostics, per-IP drill-down and attribution; v1.2.1 limits DNS diagnostics to plaintext UDP port 53; v1.2.2 makes the capture notification reflect local vs syslog forwarding; v1.3.0 adds an application detail screen with sent/received, protocol, destination and port statistics; v1.4.0 adds search over applications and destinations; v1.5.0 adds opt-in enriched syslog fields. v1.5.0 device/instrumentation validation is pending while the test phone is offline. Metadata only — no payload, L7/HTTP inspection, pcap files, root, companion addon, or firewall.
 
-**Prebuilt APK:** [`TapHive-1.4.0.apk`](https://github.com/bamit99/TapHive/releases/download/v1.4.0/TapHive-1.4.0.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
+**Prebuilt APK:** [`TapHive-1.5.0.apk`](https://github.com/bamit99/TapHive/releases/download/v1.5.0/TapHive-1.5.0.apk) (release-signed). See [`CHANGELOG.md`](CHANGELOG.md) for the hardening record.
 
 ## Highlights
 
@@ -14,6 +14,7 @@ TapHive is a clean-room Android app that captures **network flow metadata** on a
 - Syslog forwarding over UDP, TCP, or TLS, disabled by default, with facility/severity settings, bounded queue, rate limiting, reconnect backoff, and a choice of RFC 3164 or RFC 5424 framing.
 - TLS syslog uses the platform trust store and hostname verification; a TLS failure is surfaced as a certificate error and never silently downgrades to plaintext.
 - External destination enrichment is explicit opt-in (default off), uses HTTPS (`ipwho.is`), and sends only the public destination IP. On-device DNS names remain local.
+- Optional enriched syslog adds app labels, DNS/geo/ASN fields to flow events; it is off by default and separate from the enrichment lookup itself.
 - Syslog and enrichment sockets are bound to the current non-VPN default network so they never loop back into TapHive's own tunnel. Captured TCP/UDP traffic is relayed through protected sockets on that network and rewritten back into the tun, so device connectivity is preserved.
 - Main screen shows the active syslog format and a target-health indicator: green only with proof (`TCP` connect), yellow for normal/unconfirmed UDP or stale traffic, red for hard errors, dim when forwarding is disabled.
 - Retained local history in SQLite with retention `Off / 1 hour / 6 hours / 24 hours / 7 days` (default `24 hours`), plus a **Clear history** action.
@@ -178,9 +179,11 @@ Example flow event:
 
 Event types: `capture_start`, `flow_open`, `flow_close`, `capture_stop`. All events share `th_schema_version` and `th_session_id`; null optional fields are omitted.
 
+With enriched syslog enabled, flow events may also include `th_app_name`, `th_country`, `th_region`, `th_city`, `th_asn`, `th_org`, `th_isp`, `th_dns_name`, and `th_enrichment_provider`. These are additive within schema v2.
+
 **Application ↔ destination correlation:** `flow_open` carries both `th_uid` and the destination tuple (`th_dst_ip`, `th_dst_port`, `th_protocol`). `flow_close` carries the same `th_flow_id` plus byte/packet totals. Join the two events on `(th_session_id, th_flow_id)` to attribute a closed flow to an application and destination.
 
-The syslog payload intentionally contains the raw UID, IP, port, and protocol. Country, DNS name, organisation, and human-readable app labels are local enrichment only; they are not added to syslog. Resolve `th_uid` with `PackageManager` on the device, or join against your own app inventory.
+The syslog payload always contains the raw UID, IP, port, and protocol. When **Include app, DNS and geo fields** is enabled, flow events also carry optional `th_app_name`, `th_country`, `th_region`, `th_city`, `th_asn`, `th_org`, `th_isp`, `th_dns_name`, and `th_enrichment_provider`. Without that option, labels and enrichment remain local; resolve `th_uid` with `PackageManager` or join against your own app inventory.
 
 Lifecycle events also carry aggregate counters:
 
@@ -255,7 +258,7 @@ Then:
 ./gradlew :app:assembleRelease
 ```
 
-The signed release APK is `app/build/outputs/apk/release/app-release.apk`. Version metadata is `versionName 1.4.0`, `versionCode 9`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
+The signed release APK is `app/build/outputs/apk/release/app-release.apk`. Version metadata is `versionName 1.5.0`, `versionCode 10`. Android Gradle Plugin 8.7.3 prints a warning that it was tested up to `compileSdk 35`; the build succeeds against installed platform 36.
 
 ## Install and configure
 
@@ -304,7 +307,7 @@ Verified on a CPH2585 phone and SM-P615 tablet running Android 16 (API 36):
 - Android 16 back showed the exit dialog; TRAFFIC back routing and navigation were checked.
 - SQLite migrated an existing v1 database to v2 with history preserved.
 - Force-stop and relaunch resumed capture when it was left running.
-- 18 JVM tests pass. Four instrumentation tests are present; the last executed device run was two tests before the v1.2/v1.3 changes. The current v1.3 instrumentation suite has not been run because the test phone is offline. The release APK is verified signed and non-debuggable.
+- 19 JVM tests pass. Four instrumentation tests are present; the last executed device run was two tests before the v1.2+ changes. The current v1.5 instrumentation suite has not been run because the test phone is offline. The release APK is verified signed and non-debuggable.
 
 ## Privacy and permissions
 
@@ -312,7 +315,7 @@ Verified on a CPH2585 phone and SM-P615 tablet running Android 16 (API 36):
 
 **Sent externally:** only when the user enables external enrichment, public destination IPs are sent over HTTPS to `ipwho.is` to obtain country/org/isp/as. The provider can see the device's source IP. The configured syslog receiver receives metadata events; choose TLS for an authenticated, encrypted transport. No API key is used.
 
-**Not collected:** packet payloads, URLs, HTTP bodies, TLS secrets, or device identifiers beyond the RFC 3164/5424 host field. App labels, DNS names, and enrichment labels are local and are not added to syslog.
+**Not collected:** packet payloads, URLs, HTTP bodies, TLS secrets, or device identifiers beyond the RFC 3164/5424 host field. App labels, DNS names, and enrichment labels stay local unless the separate **Include app, DNS and geo fields** syslog option is enabled; that option sends them only to the configured syslog receiver.
 
 **Not backed up:** `android:allowBackup="false"` plus `dataExtractionRules` excludes the history database and preferences from cloud backup and device transfer. History is still plaintext inside the app's private sandbox.
 

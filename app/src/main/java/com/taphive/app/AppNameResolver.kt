@@ -2,6 +2,7 @@ package com.taphive.app
 
 import android.content.Context
 import android.content.pm.PackageManager
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Maps a connection owner UID to a human-readable label.
@@ -12,7 +13,7 @@ import android.content.pm.PackageManager
  */
 class AppNameResolver(private val context: Context) {
     private val pm: PackageManager = context.packageManager
-    private val cache = HashMap<Int, String>()
+    private val cache = ConcurrentHashMap<Int, String>()
 
     fun name(uid: Int): String {
         cache[uid]?.let { return it }

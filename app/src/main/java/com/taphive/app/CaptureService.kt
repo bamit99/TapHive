@@ -211,21 +211,20 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
             app.geoResolver.lookup(dstIp)
         }
 
-        app.sender.enqueue(
-            SyslogEvent(
-                sessionId = sessionId,
-                event = "flow_open",
-                timestamp = Instant.ofEpochMilli(timestampMs),
-                flowId = flowId.toString(),
-                uid = uid,
-                ipVersion = ipVersion,
-                protocol = protocol,
-                srcIp = srcIp,
-                srcPort = srcPort,
-                dstIp = dstIp,
-                dstPort = dstPort
-            )
+        val event = SyslogEvent(
+            sessionId = sessionId,
+            event = "flow_open",
+            timestamp = Instant.ofEpochMilli(timestampMs),
+            flowId = flowId.toString(),
+            uid = uid,
+            ipVersion = ipVersion,
+            protocol = protocol,
+            srcIp = srcIp,
+            srcPort = srcPort,
+            dstIp = dstIp,
+            dstPort = dstPort
         )
+        app.sender.enqueue(enrich(event, uid, dstIp))
     }
 
     override fun onFlowBytes(
@@ -263,19 +262,36 @@ class CaptureService : VpnService(), PacketReader.FlowSink {
         packetsReceived: Long,
         status: String
     ) {
-        app.tracker.closeFlow(flowId, bytesSent, bytesReceived, packetsSent, packetsReceived)
-        app.sender.enqueue(
-            SyslogEvent(
-                sessionId = sessionId,
-                event = "flow_close",
-                timestamp = Instant.ofEpochMilli(timestampMs),
-                flowId = flowId.toString(),
-                bytesSent = bytesSent,
-                bytesReceived = bytesReceived,
-                packetsSent = packetsSent,
-                packetsReceived = packetsReceived,
-                status = status
-            )
+        val flow = app.tracker.closeFlow(
+            flowId, bytesSent, bytesReceived, packetsSent, packetsReceived
+        )
+        val event = SyslogEvent(
+            sessionId = sessionId,
+            event = "flow_close",
+            timestamp = Instant.ofEpochMilli(timestampMs),
+            flowId = flowId.toString(),
+            bytesSent = bytesSent,
+            bytesReceived = bytesReceived,
+            packetsSent = packetsSent,
+            packetsReceived = packetsReceived,
+            status = status
+        )
+        app.sender.enqueue(enrich(event, flow?.uid, flow?.dstIp))
+    }
+
+    private fun enrich(event: SyslogEvent, uid: Int?, ip: String?): SyslogEvent {
+        if (!app.prefs.syslogEnriched || uid == null || ip.isNullOrBlank()) return event
+        val meta = app.database.ipMeta(ip)
+        return event.copy(
+            appName = app.appNameResolver.name(uid),
+            country = meta?.country,
+            region = meta?.region,
+            city = meta?.city,
+            asn = meta?.asn,
+            org = meta?.org,
+            isp = meta?.isp,
+            dnsName = meta?.dnsName,
+            enrichmentProvider = meta?.provider
         )
     }
 
